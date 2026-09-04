@@ -13,7 +13,7 @@ A native Android app — a second frontend for the same API as `mootmaker-webapp
   the use-case catalogue applies, whether the acceptance suite pattern transfers, how the schema is
   shared with a third consumer — and those are worth settling first.
 - **The schema is currently mirrored by hand** in each frontend. A third consumer strengthens the
-  case for sharing it as a versioned artifact; see `../mootmaker/designs/graphql-schema-sharing.md`.
+  case for sharing it as a versioned artifact; see `../mootmaker/designs/archive/graphql-schema-sharing.md`.
 - **`../mootmaker/docs/reference/use-cases.md` is deliberately client-agnostic**, but not yet tagged
   per-frontend — some cases are webapp-specific in ways that will need untangling.
 
