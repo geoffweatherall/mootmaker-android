@@ -32,7 +32,17 @@ done
 # answer 429 through the cloud proxy, and a later build simply retries.
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -f "$repo/gradlew" ]; then
-  (cd "$repo" && ./gradlew --no-daemon --max-workers=1 -q :app:assembleDebug :app:assembleDebugUnitTest :app:lintDebug) || echo "warm-up incomplete; first build will finish it"
+  warmed=no
+  for attempt in 1 2 3 4 5; do
+    if (cd "$repo" && ./gradlew --no-daemon --max-workers=1 -q \
+          :app:assembleDebug :app:assembleDebugUnitTest :app:lintDebug); then
+      warmed=yes
+      break
+    fi
+    echo "Gradle warm-up attempt $attempt failed; retrying in 20s"
+    sleep 20
+  done
+  [ "$warmed" = yes ] || echo "warm-up incomplete; the first build will finish it"
 fi
 
 echo "cloud-setup.sh finished in $(( $(date +%s) - start ))s"
