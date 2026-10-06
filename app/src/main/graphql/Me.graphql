@@ -1,0 +1,8 @@
+query Me {
+  workspace {
+    me {
+      id
+      name
+    }
+  }
+}

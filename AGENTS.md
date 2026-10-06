@@ -2,20 +2,22 @@
 
 A native Android app — a second frontend for the same API as `mootmaker-webapp`.
 
-**Not started.** This repository is a placeholder.
+**Status:** milestone M0 (toolchain spike) is in progress; the design is
+[`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
+in the hub repository. Work one milestone at a time, as that document describes.
 
-## When work begins here
+## Working here
 
 - **Read [`../mootmaker/docs/development/architecture.md`](https://github.com/geoffweatherall/mootmaker/blob/main/docs/development/architecture.md)
   first**, then `../mootmaker-api`'s README. The API contract and the auth flow are the same; only
   the frontend differs.
-- **Write a design document before any code.** A second frontend raises real questions — how much of
-  the use-case catalogue applies, whether the acceptance suite pattern transfers, how the schema is
-  shared with a third consumer — and those are worth settling first.
-- **The schema is currently mirrored by hand** in each frontend. A third consumer strengthens the
-  case for sharing it as a versioned artifact; see `../mootmaker/designs/archive/graphql-schema-sharing.md`.
-- **`../mootmaker/docs/reference/use-cases.md` is deliberately client-agnostic**, but not yet tagged
-  per-frontend — some cases are webapp-specific in ways that will need untangling.
+- **The schema is downloaded from the `@mootmaker/schema` npm package** at a pinned version (see
+  `app/build.gradle.kts`), not mirrored by hand.
+- **`../mootmaker/docs/reference/use-cases.md` is tagged per frontend**: every case is
+  **[All frontends]** or **[Webapp-specific]**, with an "android:" slot for its test-case link.
+- **Emulator tests run only in GitHub Actions.** Cloud sessions build debug variants only and never
+  handle the release keystore.
+- `scripts/cloud-setup.sh` sets up the Android SDK in a cloud session.
 
 ---
 
