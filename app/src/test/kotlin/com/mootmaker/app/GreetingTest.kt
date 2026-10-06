@@ -6,6 +6,6 @@ import org.junit.Test
 class GreetingTest {
     @Test
     fun greetingNamesTheApp() {
-        assertEquals("Mootmaker", greeting())
+        assertEquals("Moot", greeting())
     }
 }
