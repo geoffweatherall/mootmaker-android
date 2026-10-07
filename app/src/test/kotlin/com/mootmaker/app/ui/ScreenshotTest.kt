@@ -17,6 +17,11 @@ import com.mootmaker.app.ui.signin.SignInScreen
 import com.mootmaker.app.ui.signin.SignInState
 import com.mootmaker.app.ui.theme.MootmakerTheme
 import com.mootmaker.data.agenda.TimeFormat
+import com.mootmaker.app.ui.settings.SectionStatus
+import com.mootmaker.app.ui.settings.SettingsActions
+import com.mootmaker.app.ui.settings.SettingsScreen
+import com.mootmaker.app.ui.settings.SettingsState
+import com.mootmaker.data.settings.Profile
 import com.mootmaker.data.agenda.DateFormat
 import com.mootmaker.data.api.HomeData
 import com.mootmaker.data.meeting.MeetingFormReference
@@ -155,5 +160,24 @@ class ScreenshotTest {
             filledForm.copy(roomId = "", errors = listOf("Please select a room.", "The room does not have enough capacity for all attendees.")),
             noFormActions,
         )
+    }
+
+    private val settingsProfile = Profile("p1", "Pat Example", DateFormat.British, TimeFormat.AmPm, "Monday", avatarUrl = null)
+    private val settingsState = SettingsState(profile = settingsProfile, loaded = true, name = "Pat Example", dateFormat = DateFormat.British, timeFormat = TimeFormat.AmPm)
+    private val noSettingsActions = SettingsActions({}, {}, {}, {}, {}, {}, {}, {}, {})
+
+    @Test
+    fun settings() = capture("settings") {
+        SettingsScreen(settingsState, noSettingsActions)
+    }
+
+    @Test
+    fun settingsDark() = capture("settings-dark", dark = true) {
+        SettingsScreen(settingsState, noSettingsActions)
+    }
+
+    @Test
+    fun settingsRejected() = capture("settings-rejected") {
+        SettingsScreen(settingsState.copy(name = "", nameStatus = SectionStatus(errors = listOf("Name must not be blank.")), formatStatus = SectionStatus(success = "Your date and time formats were updated.")), noSettingsActions)
     }
 }

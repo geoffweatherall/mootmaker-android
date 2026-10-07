@@ -2,6 +2,9 @@ package com.mootmaker.app
 
 import android.content.Context
 import com.apollographql.apollo.ApolloClient
+import coil3.ImageLoader
+import coil3.decode.BitmapFactoryDecoder
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.apollographql.apollo.network.okHttpClient
 import com.mootmaker.data.DataStoreKeyValueStore
 import com.mootmaker.data.KeyValueStore
@@ -15,6 +18,8 @@ import com.mootmaker.data.api.MeetingFormRepository
 import com.mootmaker.data.api.MeetingFormSource
 import com.mootmaker.data.api.MeetingRepository
 import com.mootmaker.data.api.MeetingSource
+import com.mootmaker.data.api.SettingsRepository
+import com.mootmaker.data.api.SettingsSource
 import com.mootmaker.data.auth.AndroidKeystoreCipher
 import com.mootmaker.data.auth.CognitoClient
 import com.mootmaker.data.auth.ConfigState
@@ -76,7 +81,21 @@ class AppContainer(
 
     val meetingFormSource: MeetingFormSource = MeetingFormRepository(apollo = ::apolloClient, idToken = session::idToken)
 
+    val settingsSource: SettingsSource = SettingsRepository(apollo = ::apolloClient, idToken = session::idToken, http = http)
+
     val calendarSource: CalendarSource = CalendarRepository(apollo = ::apolloClient, idToken = session::idToken)
+
+    /**
+     * Loads avatars through the same HTTP client as everything else, so a test's fake backend plays
+     * the avatar host too. Coil caches by URL, which is safe because an avatar's URL changes with its image.
+     */
+    fun avatarLoader(context: Context): ImageLoader = ImageLoader.Builder(context)
+        .components {
+            add(OkHttpNetworkFetcherFactory(callFactory = { http }))
+            // Avatars are small static JPEGs; BitmapFactory decodes them everywhere, which Robolectric's ImageDecoder does not.
+            add(BitmapFactoryDecoder.Factory())
+        }
+        .build()
 
     private val liveUpdates: LiveUpdates = live ?: AppSyncRealtime(
         http = http,

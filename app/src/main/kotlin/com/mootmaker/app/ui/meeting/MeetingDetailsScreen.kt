@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mootmaker.app.ui.theme.roomColor
+import com.mootmaker.app.ui.Avatar
 import com.mootmaker.data.agenda.formatDate
 import com.mootmaker.data.agenda.formatTime
 import com.mootmaker.data.meeting.AttendeeStatus
@@ -197,9 +198,7 @@ private fun PersonRow(person: PersonRef, myPersonId: String?, status: String?, o
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
     ) {
-        Box(Modifier.size(28.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-            Text(initials(person.name), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-        }
+        Avatar(person.name, person.avatarUrl)
         Spacer(Modifier.width(12.dp))
         Text(person.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         when {
@@ -208,9 +207,6 @@ private fun PersonRow(person: PersonRef, myPersonId: String?, status: String?, o
         }
     }
 }
-
-private fun initials(name: String): String =
-    name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
 
 @Composable
 private fun LoadFailed(message: String, onRetry: () -> Unit) {

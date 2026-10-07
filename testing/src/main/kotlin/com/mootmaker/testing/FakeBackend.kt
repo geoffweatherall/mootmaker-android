@@ -23,7 +23,7 @@ import java.time.LocalDate
 
 data class FakeRoom(val id: String, val name: String, val color: String? = null, val capacity: Int = 6)
 
-data class FakePerson(val id: String, val name: String)
+data class FakePerson(val id: String, val name: String, val avatarUrl: String? = null)
 
 data class FakeMeeting(
     val id: String,
@@ -63,6 +63,17 @@ class FakeBackend : Interceptor {
     var isAdmin = false
     var timeFormat = "TwentyFourHour"
     var dateFormat = "Iso"
+    var weekStart = "Monday"
+
+    /** The signed-in person's avatar: a URL on [AVATAR_HOST], or null for none. */
+    var avatarUrl: String? = null
+
+    /** The last image PUT to [UPLOAD_HOST], and the headers it carried. */
+    var uploadedBytes: ByteArray? = null
+    var uploadHeaders: Map<String, String> = emptyMap()
+
+    /** The preferences the last `updateMyPreferences` was sent, as `dateFormat/timeFormat/weekStart`. */
+    var lastPreferences: String? = null
 
     /** Everyone `workspace.people` lists. The signed-in person ([personId], [personName]) is added to it. */
     var otherPeople = listOf(FakePerson("person-2", "Sam Other"))
@@ -89,6 +100,22 @@ class FakeBackend : Interceptor {
             }
             request.url.host.startsWith("cognito-idp.") -> cognito(chain, request.header("X-Amz-Target").orEmpty().substringAfter('.'), body)
             request.url.host == GRAPHQL_HOST -> graphql(chain, body)
+            request.url.host == UPLOAD_HOST -> {
+                requests += "upload ${request.method}"
+                // OkHttp adds Content-Type and Content-Length after application interceptors, so read them off the body.
+                uploadHeaders = request.headers.toMultimap().mapValues { it.value.first() } +
+                    listOfNotNull(
+                        request.body?.contentType()?.let { "Content-Type" to it.toString() },
+                        request.body?.let { "Content-Length" to it.contentLength().toString() },
+                    )
+                uploadedBytes = request.body?.let { Buffer().also(it::writeTo).readByteArray() }
+                respond(chain, 200, "")
+            }
+            request.url.host == AVATAR_HOST -> {
+                requests += "avatar ${request.method}"
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body(PIXEL_PNG.toResponseBody("image/png".toMediaType())).build()
+            }
             else -> respond(chain, 404, "Not found")
         }
     }
@@ -144,6 +171,11 @@ class FakeBackend : Interceptor {
             "CreateMeeting" -> return respond(chain, 200, createMeetingResponse(variables!!["meeting"]!!.jsonObject))
             "UpdateMeeting" -> return respond(chain, 200, updateMeetingResponse(variables!!["id"]!!.jsonPrimitive.content, variables["meeting"]!!.jsonObject))
             "CancelMeeting" -> return respond(chain, 200, cancelMeetingResponse(variables!!["id"]!!.jsonPrimitive.content))
+            "UpdateMyName" -> return respond(chain, 200, updateNameResponse(variables!!["name"]!!.jsonPrimitive.content))
+            "UpdateMyPreferences" -> return respond(chain, 200, updatePreferencesResponse(variables!!["preferences"]!!.jsonObject))
+            "RequestAvatarUpload" -> return respond(chain, 200, requestAvatarUploadResponse(variables!!["contentType"]!!.jsonPrimitive.content))
+            "ConfirmAvatarUpload" -> return respond(chain, 200, personResult("confirmAvatarUpload", personId?.also { avatarUrl = "https://$AVATAR_HOST/v1/$it/${uploadedBytes?.size ?: 0}.png" }))
+            "RemoveAvatar" -> return respond(chain, 200, personResult("removeAvatar", personId?.also { avatarUrl = null }))
             "RespondToMeeting" -> return respond(chain, 200, respondResponse(variables!!["meetingId"]!!.jsonPrimitive.content, variables["status"]!!.jsonPrimitive.content))
         }
         val dates = (request["variables"]?.jsonObject?.get("dates") as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
@@ -244,6 +276,48 @@ class FakeBackend : Interceptor {
         return mutationResult("updateMeeting", updated, emptyList())
     }
 
+    private fun personResult(field: String, id: String?, errors: List<String> = emptyList()): String = buildJsonObject {
+        putJsonObject("data") {
+            putJsonObject(field) {
+                if (id == null) put("person", JsonNull) else putJsonObject("person") { put("id", id) }
+                put("errors", buildJsonArray { errors.forEach { add(JsonPrimitive(it)) } })
+            }
+        }
+    }.toString()
+
+    private fun updateNameResponse(name: String): String = when {
+        personId == null -> personResult("updateMyName", null, listOf("NoLinkedPerson"))
+        name.isBlank() -> personResult("updateMyName", null, listOf("NameRequired"))
+        else -> personResult("updateMyName", personId.also { personName = name.trim() })
+    }
+
+    private fun updatePreferencesResponse(preferences: JsonObject): String {
+        val id = personId ?: return personResult("updateMyPreferences", null, listOf("NoLinkedPerson"))
+        dateFormat = preferences["dateFormat"]!!.jsonPrimitive.content
+        timeFormat = preferences["timeFormat"]!!.jsonPrimitive.content
+        weekStart = preferences["weekStart"]!!.jsonPrimitive.content
+        lastPreferences = "$dateFormat/$timeFormat/$weekStart"
+        return personResult("updateMyPreferences", id)
+    }
+
+    private fun requestAvatarUploadResponse(contentType: String): String = buildJsonObject {
+        putJsonObject("data") {
+            putJsonObject("requestAvatarUpload") {
+                if (contentType != "image/jpeg" && contentType != "image/png") {
+                    put("upload", JsonNull)
+                    put("errors", buildJsonArray { add(JsonPrimitive("UnsupportedContentType")) })
+                } else {
+                    putJsonObject("upload") {
+                        put("uploadId", "upload-1")
+                        put("url", "https://$UPLOAD_HOST/staging/upload-1")
+                        put("contentType", contentType)
+                    }
+                    put("errors", buildJsonArray { })
+                }
+            }
+        }
+    }.toString()
+
     private fun cancelMeetingResponse(id: String): String {
         val found = meetings.any { it.id == id }
         if (found) meetings = meetings.filter { it.id != id }
@@ -299,6 +373,8 @@ class FakeBackend : Interceptor {
                         put("name", personName)
                         put("timeFormat", timeFormat)
                         put("dateFormat", dateFormat)
+                        put("weekStart", weekStart)
+                        put("avatarUrl", avatarUrl)
                     }
                 }
                 put("people", buildJsonArray { people.forEach { add(buildJsonObject { put("id", it.id); put("name", it.name) }) } })
@@ -348,14 +424,14 @@ class FakeBackend : Interceptor {
             put("id", roomId)
             put("name", rooms.firstOrNull { it.id == roomId }?.name ?: "Unknown room")
         }
-        putJsonObject("organiser") { put("id", organiserId); put("name", nameOf(organiserId)) }
+        putJsonObject("organiser") { put("id", organiserId); put("name", nameOf(organiserId)); put("avatarUrl", avatarOf(organiserId)) }
         put(
             "attendees",
             buildJsonArray {
                 attendeeIds.forEach { id ->
                     add(
                         buildJsonObject {
-                            putJsonObject("person") { put("id", id); put("name", nameOf(id)) }
+                            putJsonObject("person") { put("id", id); put("name", nameOf(id)); put("avatarUrl", avatarOf(id)) }
                             put("status", responses[id] ?: "NoResponse")
                         },
                     )
@@ -363,6 +439,8 @@ class FakeBackend : Interceptor {
             },
         )
     }
+
+    private fun avatarOf(id: String): String? = if (id == personId) avatarUrl else people.firstOrNull { it.id == id }?.avatarUrl
 
     private fun nameOf(id: String) = people.firstOrNull { it.id == id }?.name ?: "Person $id"
 
@@ -376,6 +454,13 @@ class FakeBackend : Interceptor {
 
     companion object {
         const val GRAPHQL_HOST = "api.fake.mootmaker.test"
+        const val UPLOAD_HOST = "uploads.fake.mootmaker.test"
+        const val AVATAR_HOST = "avatars.fake.mootmaker.test"
+
+        /** A real 1x1 PNG, so an avatar served from [AVATAR_HOST] decodes. */
+        private val PIXEL_PNG = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        )
 
         /** A meeting on [date] at [hour]:00 for an hour, organised by the default person. */
         fun meeting(id: String, subject: String, date: LocalDate, hour: Int, roomId: String = "room-1", organiserId: String = "person-1") =

@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mootmaker.app.ui.Avatar
 import com.mootmaker.app.ui.meeting.ResponseButtons
 import com.mootmaker.app.ui.theme.roomColor
 import com.mootmaker.data.agenda.AgendaDay
@@ -77,6 +78,7 @@ data class HomeActions(
     val onOpenMeeting: (meetingId: String) -> Unit,
     val onRespond: (meetingId: String, status: AttendeeStatus) -> Unit = { _, _ -> },
     val onSearchFurtherAhead: () -> Unit = {},
+    val onSettings: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +94,7 @@ fun HomeScreen(state: HomeState, fallbackName: String?, actions: HomeActions) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More options")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(text = { Text("Settings") }, onClick = { menuOpen = false; actions.onSettings() })
                         DropdownMenuItem(text = { Text("About") }, onClick = { menuOpen = false; actions.onAbout() })
                         DropdownMenuItem(text = { Text("Sign out") }, onClick = { menuOpen = false; actions.onSignOut() })
                     }
@@ -119,17 +122,22 @@ private fun Agenda(state: HomeState, fallbackName: String?, actions: HomeActions
     val agenda = data.agenda!!
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Column {
-                Text(
-                    data.name ?: fallbackName ?: "Welcome",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    state.today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            val greeting = data.name ?: fallbackName ?: "Welcome"
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Only someone with a photo gets one here: initials would add nothing next to their name.
+                if (data.avatarUrl != null) Avatar(greeting, data.avatarUrl, size = 48.dp, textStyle = MaterialTheme.typography.titleMedium)
+                Column {
+                    Text(
+                        greeting,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        state.today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         item {

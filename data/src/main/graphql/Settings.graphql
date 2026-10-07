@@ -1,0 +1,66 @@
+# The Settings screen: who you are and the preferences and avatar you can change. `me` is null for
+# an account with no linked Person, which is what turns the screen's controls off.
+query Settings {
+  workspace {
+    me {
+      id
+      name
+      dateFormat
+      timeFormat
+      weekStart
+      avatarUrl
+    }
+  }
+}
+
+# Rejections in this file's mutations come back as a successful response with `errors` set.
+mutation UpdateMyName($name: String!) {
+  updateMyName(name: $name) {
+    person {
+      id
+    }
+    errors
+  }
+}
+
+# Replaces the whole preference set, so weekStart is sent back as it was even though the app
+# doesn't offer it.
+mutation UpdateMyPreferences($preferences: PreferencesInput!) {
+  updateMyPreferences(preferences: $preferences) {
+    person {
+      id
+    }
+    errors
+  }
+}
+
+# Step one of an avatar change: where to PUT the bytes.
+mutation RequestAvatarUpload($personId: ID!, $contentType: String!, $contentLength: Int!) {
+  requestAvatarUpload(personId: $personId, contentType: $contentType, contentLength: $contentLength) {
+    upload {
+      uploadId
+      url
+      contentType
+    }
+    errors
+  }
+}
+
+# Step two: the API validates and normalises what was PUT, and makes it the avatar.
+mutation ConfirmAvatarUpload($personId: ID!, $uploadId: ID!) {
+  confirmAvatarUpload(personId: $personId, uploadId: $uploadId) {
+    person {
+      id
+    }
+    errors
+  }
+}
+
+mutation RemoveAvatar($personId: ID!) {
+  removeAvatar(personId: $personId) {
+    person {
+      id
+    }
+    errors
+  }
+}
