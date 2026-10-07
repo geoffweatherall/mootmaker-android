@@ -1,0 +1,135 @@
+package com.mootmaker.app.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.mootmaker.app.AppContainer
+import com.mootmaker.app.BuildConfig
+import com.mootmaker.app.WebLinks
+import com.mootmaker.app.openInCustomTab
+import com.mootmaker.app.ui.about.AboutScreen
+import com.mootmaker.app.ui.home.HomeActions
+import com.mootmaker.app.ui.home.HomeScreen
+import com.mootmaker.app.ui.home.HomeViewModel
+import com.mootmaker.app.ui.signin.SignInConfig
+import com.mootmaker.app.ui.signin.SignInScreen
+import com.mootmaker.app.ui.signin.SignInViewModel
+import com.mootmaker.data.auth.ConfigState
+import com.mootmaker.data.auth.SessionState
+import kotlinx.coroutines.launch
+
+private object Routes {
+    const val SIGN_IN = "signin"
+    const val HOME = "home"
+    const val ABOUT = "about"
+}
+
+/**
+ * The app's navigation. Which screen is the root follows the session: signing in replaces the
+ * sign-in screen with home, and signing out (or a session that can no longer be refreshed) clears
+ * the back stack back to sign-in, so Back can never return to a signed-in screen (use case B.13).
+ */
+@Composable
+fun MootmakerApp(container: AppContainer) {
+    val session = container.session
+    val sessionState by session.state.collectAsStateWithLifecycle()
+    val configState by session.config.collectAsStateWithLifecycle()
+
+    if (sessionState == SessionState.Starting) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        }
+        return
+    }
+
+    val signedIn = sessionState is SessionState.SignedIn
+    val navController = rememberNavController()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val links = WebLinks(configState.environment.siteUrl)
+    val open: (String) -> Unit = { openInCustomTab(context, it) }
+
+    LaunchedEffect(signedIn) { navController.resetTo(if (signedIn) Routes.HOME else Routes.SIGN_IN) }
+
+    NavHost(navController, startDestination = if (signedIn) Routes.HOME else Routes.SIGN_IN) {
+        composable(Routes.SIGN_IN) {
+            val viewModel = viewModel { SignInViewModel(session::signIn) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            val config = when (val current = configState) {
+                is ConfigState.Loading -> SignInConfig.Loading
+                is ConfigState.Failed -> SignInConfig.Failed(current.environment.name)
+                is ConfigState.Ready -> SignInConfig.Ready(hasDemoUser = current.config.demoUserEmail != null)
+            }
+            LaunchedEffect(configState) {
+                (configState as? ConfigState.Ready)?.config?.let { viewModel.prefill(it.demoUserEmail, it.demoUserPassword) }
+            }
+            SignInScreen(
+                state = state,
+                config = config,
+                onEmailChange = viewModel::onEmailChange,
+                onPasswordChange = viewModel::onPasswordChange,
+                onSubmit = viewModel::submit,
+                onRetryConfig = { scope.launch { session.retryConfig() } },
+                onCreateAccount = { open(links.signUp()) },
+                onForgotPassword = { open(links.forgotPassword()) },
+                onAbout = { navController.navigate(Routes.ABOUT) },
+            )
+        }
+        composable(Routes.HOME) {
+            val viewModel = viewModel { HomeViewModel(container.homeSource) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            val claims = (sessionState as? SessionState.SignedIn)?.claims
+            LifecycleResumeEffect(viewModel) {
+                viewModel.refresh()
+                onPauseOrDispose { }
+            }
+            HomeScreen(
+                state = state,
+                fallbackName = claims?.name ?: claims?.email,
+                actions = HomeActions(
+                    onCalendar = { claims?.personId?.let { open(links.calendar(it)) } },
+                    onRoomAvailabilityToday = { open(links.roomAvailability(state.today)) },
+                    onAddMeeting = { open(links.addMeeting()) },
+                    onRetry = viewModel::refresh,
+                    onAbout = { navController.navigate(Routes.ABOUT) },
+                    onSignOut = { scope.launch { session.signOut() } },
+                ),
+            )
+        }
+        composable(Routes.ABOUT) {
+            AboutScreen(
+                versionName = BuildConfig.VERSION_NAME,
+                versionCode = BuildConfig.VERSION_CODE,
+                environment = configState.environment,
+                onSwitchEnvironment = { environment ->
+                    scope.launch { session.switchEnvironment(environment) }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+    }
+}
+
+private fun NavHostController.resetTo(route: String) {
+    if (currentDestination?.route == route) return
+    navigate(route) {
+        popUpTo(graph.id) { inclusive = true }
+        launchSingleTop = true
+    }
+}

@@ -35,7 +35,7 @@ if [ -f "$repo/gradlew" ]; then
   warmed=no
   for attempt in 1 2 3 4 5; do
     if (cd "$repo" && ./gradlew --no-daemon --max-workers=1 -q \
-          :app:assembleDebug :app:assembleDebugUnitTest :app:lintDebug); then
+          :app:assembleDebug :app:assembleDebugUnitTest :data:assembleDebugUnitTest :app:lintDebug); then
       warmed=yes
       break
     fi

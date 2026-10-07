@@ -3,20 +3,16 @@ package com.mootmaker.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.activity.enableEdgeToEdge
+import com.mootmaker.app.ui.MootmakerApp
+import com.mootmaker.app.ui.theme.MootmakerTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { Greeting() } }
+        enableEdgeToEdge()
+        val container = (application as MootmakerApplication).container
+        container.start()
+        setContent { MootmakerTheme { MootmakerApp(container) } }
     }
-}
-
-fun greeting(): String = "Mootmaker"
-
-@Composable
-fun Greeting() {
-    Text(text = greeting())
 }

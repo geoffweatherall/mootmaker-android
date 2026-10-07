@@ -1,22 +1,17 @@
-import java.net.URI
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.apollo)
     alias(libs.plugins.roborazzi)
 }
-
-// Pinned version of the schema published by mootmaker-api (npm: @mootmaker/schema).
-val schemaVersion = "6.2.0"
 
 android {
     namespace = "com.mootmaker.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mootmaker.app"
+        // Permanent: Android identifies the app by this on every device. See the design's choice 2.
+        applicationId = "com.mootmaker.android"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -24,7 +19,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildFeatures { compose = true }
+    buildTypes {
+        debug {
+            // Lets a debug build sit beside the published app on one phone.
+            applicationIdSuffix = ".debug"
+        }
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
@@ -34,13 +39,20 @@ android {
 kotlin { jvmToolchain(21) }
 
 dependencies {
+    implementation(project(":data"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.apollo.runtime)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
 
+    testImplementation(project(":testing"))
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
@@ -48,34 +60,11 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit)
 
+    androidTestImplementation(project(":testing"))
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(platform(libs.compose.bom))
     debugImplementation(libs.compose.ui.test.manifest)
-}
-
-// Downloads the pinned schema from the public npm registry (no token needed) and extracts
-// mootmaker.graphql for Apollo's code generator.
-val fetchSchema by tasks.registering {
-    val outDir = layout.buildDirectory.dir("schema")
-    val version = schemaVersion
-    inputs.property("version", version)
-    outputs.dir(outDir)
-    doLast {
-        val dir = outDir.get().asFile.apply { mkdirs() }
-        val url = "https://registry.npmjs.org/@mootmaker/schema/-/schema-$version.tgz"
-        val tgz = File(dir, "schema.tgz")
-        URI(url).toURL().openStream().use { input -> tgz.outputStream().use { input.copyTo(it) } }
-        exec {
-            commandLine("tar", "xzf", tgz.absolutePath, "-C", dir.absolutePath, "--strip-components=1", "package/mootmaker.graphql")
-        }
-        tgz.delete()
-    }
-}
-
-apollo {
-    service("mootmaker") {
-        packageName.set("com.mootmaker.app.graphql")
-        schemaFiles.from(files(layout.buildDirectory.file("schema/mootmaker.graphql")).builtBy(fetchSchema))
-    }
 }
