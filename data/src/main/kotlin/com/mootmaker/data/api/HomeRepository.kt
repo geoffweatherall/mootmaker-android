@@ -31,6 +31,8 @@ data class HomeData(
     val needsResponse: List<NeedsResponseItem> = emptyList(),
     /** The last day the needs-response window covers. */
     val windowEnd: LocalDate,
+    /** The caller's avatar, or null when they have none (or no Person). */
+    val avatarUrl: String? = null,
 )
 
 /** A failed request, with the message to show. GraphQL errors are shown as the API words them. */
@@ -95,6 +97,7 @@ class HomeRepository(
         }
         return HomeData(
             name = me?.name,
+            avatarUrl = me?.avatarUrl,
             timeFormat = when (me?.timeFormat) {
                 ApiTimeFormat.AmPm -> TimeFormat.AmPm
                 else -> TimeFormat.TwentyFourHour

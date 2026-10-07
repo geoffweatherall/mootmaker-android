@@ -15,11 +15,13 @@ query MeetingDetails($id: ID!) {
     organiser {
       id
       name
+      avatarUrl
     }
     attendees {
       person {
         id
         name
+        avatarUrl
       }
       status
     }

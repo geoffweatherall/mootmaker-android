@@ -1,13 +1,18 @@
 package com.mootmaker.app.ui
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -46,19 +51,26 @@ import com.mootmaker.app.ui.home.HomeViewModel
 import com.mootmaker.app.ui.meeting.MeetingDetailsActions
 import com.mootmaker.app.ui.meeting.MeetingDetailsScreen
 import com.mootmaker.app.ui.meeting.MeetingDetailsViewModel
+import com.mootmaker.app.ui.settings.SettingsActions
+import com.mootmaker.app.ui.settings.SettingsScreen
+import com.mootmaker.app.ui.settings.SettingsViewModel
+import com.mootmaker.app.ui.settings.prepareAvatar
 import com.mootmaker.app.ui.signin.SignInConfig
 import com.mootmaker.app.ui.signin.SignInScreen
 import com.mootmaker.app.ui.signin.SignInViewModel
 import com.mootmaker.data.auth.ConfigState
 import com.mootmaker.data.auth.SessionState
 import com.mootmaker.data.meeting.meetingShareUrl
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 private object Routes {
     const val SIGN_IN = "signin"
     const val HOME = "home"
     const val ABOUT = "about"
+    const val SETTINGS = "settings"
     const val AVAILABILITY = "availability/{date}"
 
     const val ADD_MEETING = "meetings/add/{date}"
@@ -106,6 +118,8 @@ fun MootmakerApp(container: AppContainer) {
 
     LaunchedEffect(signedIn) { navController.resetTo(if (signedIn) Routes.HOME else Routes.SIGN_IN) }
 
+    val avatarLoader = remember(container) { container.avatarLoader(context) }
+    CompositionLocalProvider(LocalAvatarLoader provides avatarLoader) {
     NavHost(navController, startDestination = if (signedIn) Routes.HOME else Routes.SIGN_IN) {
         composable(Routes.SIGN_IN) {
             val viewModel = viewModel { SignInViewModel(session::signIn) }
@@ -148,6 +162,7 @@ fun MootmakerApp(container: AppContainer) {
                     onAddMeeting = { navController.navigate(Routes.addMeeting(state.today)) },
                     onRetry = viewModel::refresh,
                     onAbout = { navController.navigate(Routes.ABOUT) },
+                    onSettings = { navController.navigate(Routes.SETTINGS) },
                     onSignOut = { scope.launch { session.signOut() } },
                     onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                     onRespond = viewModel::respond,
@@ -285,6 +300,33 @@ fun MootmakerApp(container: AppContainer) {
                 ),
             )
         }
+        composable(Routes.SETTINGS) {
+            val viewModel = viewModel { SettingsViewModel(container.settingsSource) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(viewModel) { viewModel.load() }
+            val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                if (uri != null) {
+                    scope.launch {
+                        val prepared = withContext(Dispatchers.IO) { runCatching { prepareAvatar(context, uri) }.getOrNull() }
+                        if (prepared == null) viewModel.avatarUnreadable() else viewModel.setAvatar(prepared.bytes, prepared.contentType)
+                    }
+                }
+            }
+            SettingsScreen(
+                state = state,
+                actions = SettingsActions(
+                    onBack = { navController.popBackStack() },
+                    onRetry = viewModel::load,
+                    onName = viewModel::setName,
+                    onSaveName = viewModel::saveName,
+                    onDateFormat = viewModel::setDateFormat,
+                    onTimeFormat = viewModel::setTimeFormat,
+                    onSaveFormats = viewModel::saveFormats,
+                    onChoosePhoto = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onRemovePhoto = viewModel::removeAvatar,
+                ),
+            )
+        }
         composable(Routes.ABOUT) {
             AboutScreen(
                 versionName = BuildConfig.VERSION_NAME,
@@ -296,6 +338,7 @@ fun MootmakerApp(container: AppContainer) {
                 onBack = { navController.popBackStack() },
             )
         }
+    }
     }
 }
 

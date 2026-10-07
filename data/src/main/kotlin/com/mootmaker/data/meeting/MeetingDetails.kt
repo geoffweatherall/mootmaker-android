@@ -13,7 +13,8 @@ enum class AttendeeStatus(val label: String) {
     NoResponse("No response"),
 }
 
-data class PersonRef(val id: String, val name: String)
+/** [avatarUrl] is null for someone with no avatar, who is shown by their initials. */
+data class PersonRef(val id: String, val name: String, val avatarUrl: String? = null)
 
 data class AttendeeRow(val person: PersonRef, val status: AttendeeStatus)
 

@@ -5,6 +5,7 @@ query Home($dates: [String!]) {
     me {
       id
       name
+      avatarUrl
       timeFormat
     }
     rooms {

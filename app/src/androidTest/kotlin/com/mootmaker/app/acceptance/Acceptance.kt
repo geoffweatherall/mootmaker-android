@@ -128,6 +128,59 @@ class Api(private val account: Acceptance.Account) {
     fun myName(): String =
         query("query { workspace { me { name } } }")["workspace"]!!.jsonObject["me"]!!.jsonObject.string("name")
 
+    /** The caller's own name, set directly. Settings tests use it to put a shared fixture user back as they found it. */
+    fun updateMyName(name: String) {
+        val result = query(
+            "mutation(\$name: String!) { updateMyName(name: \$name) { errors } }",
+            buildJsonObject { put("name", name) },
+        )["updateMyName"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
+    /** The caller's date format, time format and week start, as `Iso/TwentyFourHour/Monday`. */
+    fun preferences(): String {
+        val me = query("query { workspace { me { dateFormat timeFormat weekStart } } }")["workspace"]!!.jsonObject["me"]!!.jsonObject
+        return listOf("dateFormat", "timeFormat", "weekStart").joinToString("/") { me.string(it) }
+    }
+
+    fun setPreferences(dateFormat: String, timeFormat: String, weekStart: String) {
+        val preferences = buildJsonObject { put("dateFormat", dateFormat); put("timeFormat", timeFormat); put("weekStart", weekStart) }
+        val result = query(
+            "mutation(\$preferences: PreferencesInput!) { updateMyPreferences(preferences: \$preferences) { errors } }",
+            buildJsonObject { put("preferences", preferences) },
+        )["updateMyPreferences"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
+    /** The caller's own avatar URL, or null for none. */
+    fun avatarUrl(): String? =
+        (query("query { workspace { me { avatarUrl } } }")["workspace"]!!.jsonObject["me"]!!.jsonObject["avatarUrl"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    /** Sets the caller's own avatar through the API's two-step upload, the way the app does. */
+    fun setAvatar(personId: String, png: ByteArray) {
+        val requested = query(
+            "mutation(\$p: ID!, \$t: String!, \$n: Int!) { requestAvatarUpload(personId: \$p, contentType: \$t, contentLength: \$n) { upload { uploadId url } errors } }",
+            buildJsonObject { put("p", personId); put("t", "image/png"); put("n", png.size) },
+        )["requestAvatarUpload"]!!.jsonObject
+        checkNoErrors(requested)
+        val upload = requested["upload"]!!.jsonObject
+        val put = Request.Builder().url(upload.string("url")).put(png.toRequestBody("image/png".toMediaType())).build()
+        Acceptance.http.newCall(put).execute().use { check(it.isSuccessful) { "Avatar PUT returned HTTP ${it.code}" } }
+        val confirmed = query(
+            "mutation(\$p: ID!, \$u: ID!) { confirmAvatarUpload(personId: \$p, uploadId: \$u) { errors } }",
+            buildJsonObject { put("p", personId); put("u", upload.string("uploadId")) },
+        )["confirmAvatarUpload"]!!.jsonObject
+        checkNoErrors(confirmed)
+    }
+
+    fun removeAvatar(personId: String) {
+        val result = query(
+            "mutation(\$p: ID!) { removeAvatar(personId: \$p) { errors } }",
+            buildJsonObject { put("p", personId) },
+        )["removeAvatar"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
     /** A guest Person (admin only): someone to organise or attend meetings without signing in. */
     fun createPerson(name: String): String {
         val result = query(
@@ -240,6 +293,10 @@ fun ComposeTestRule.shown(text: String) = onAllNodes(hasText(text)).fetchSemanti
 fun ComposeTestRule.onAllNodesWithTextFirst(text: String): SemanticsNodeInteraction = onAllNodes(hasText(text)).onFirst()
 
 fun ComposeTestRule.waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
+
+/** For text that is part of a longer line, such as a time range inside an agenda row. */
+fun ComposeTestRule.waitForTextContaining(text: String) =
+    waitUntil(TIMEOUT_MS) { onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
 
 /**
  * Scrolls the home screen's list until a node matching [matcher] is composed. Home is a lazy list:
