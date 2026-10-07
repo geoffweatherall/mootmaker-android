@@ -94,7 +94,7 @@ jobs:
           repository: geoffweatherall/mootmaker-webapp
           path: siblings/mootmaker-webapp
 
-      # Java 25 builds the API. Java 21, set up after it and so the default, runs Gradle.
+      # Java 25 builds the API (create step). Java 21, set up after it and so the default, runs Gradle.
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -171,6 +171,9 @@ jobs:
       - name: Create the environment
         id: env
         working-directory: siblings/mootmaker-ephemeral-envs
+        env:
+          # Gradle needed Java 21 as the default; the API's Maven build needs 25.
+          JAVA_HOME: ${{ env.JAVA_HOME_25_X64 }}
         run: |
           set -o pipefail
           # stderr is kept so that a create that fails partway can still be named and torn down.
