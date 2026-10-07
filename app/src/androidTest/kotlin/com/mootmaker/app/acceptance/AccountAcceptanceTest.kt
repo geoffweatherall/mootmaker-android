@@ -48,7 +48,11 @@ class AccountAcceptanceTest {
 
     private val cognito by lazy { CognitoClient(Acceptance.http, Acceptance.config.userPoolId, Acceptance.config.androidClientId) }
 
-    private fun button(text: String) = compose.onNode(hasText(text) and hasClickAction())
+    /**
+     * Scrolled into view first: once a field has focus the keyboard covers the bottom of these forms,
+     * and a tap on a button under it lands on the keyboard instead.
+     */
+    private fun button(text: String) = compose.onNode(hasText(text) and hasClickAction()).performScrollTo()
 
     private fun startSignUp(identity: EmailHelper.Identity) {
         scenario = Acceptance.launchApp()
@@ -137,7 +141,7 @@ class AccountAcceptanceTest {
         compose.onNodeWithContentDescription("More options").performClick()
         compose.onNodeWithText("Settings").performClick()
         compose.waitForText("Your name")
-        button("Delete my account").performScrollTo().performClick()
+        button("Delete my account").performClick()
         compose.waitForText("Delete your account?")
         compose.onNode(hasText("Delete my account") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         compose.waitForText("Create an account")
