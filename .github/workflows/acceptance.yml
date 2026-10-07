@@ -1,26 +1,28 @@
-# Acceptance: the app on an emulator against a real ephemeral environment created for this run,
-# then torn down whatever happens (design Q6-B: label-triggered, so it costs nothing until asked for).
+# Acceptance on a pull request (design Q6-B: label-triggered, so it costs nothing until asked for).
 #
 # Run it by adding the `run-acceptance` label to a pull request. While the label stays on, every
 # push to the PR runs it again. A cloud session adds the label through the REST API
 # (POST repos/{owner}/{repo}/issues/{n}/labels), because the GitHub proxy blocks GraphQL.
 #
+# It runs the release pipeline's own Android stages, so a PR proves them before a release depends
+# on them:
+#   1. release-build.yml with a throwaway signing key: builds the release APK, creates an and-acc
+#      ephemeral environment, runs the acceptance suite (app/src/androidTest/.../acceptance) on an
+#      emulator against that APK, and tears the environment down whatever happens.
+#   2. smoke.yml with that APK against production: the read-only demo sign-in release.yml runs.
+#
 # Pull-request events only, deliberately. AWS trusts this repository's OIDC token only when its
 # subject is `repo:...:pull_request` (the ephemeral role in mootmaker-bootstrap-aws-accounts,
 # workload-account/github-actions-deploy-role.yaml). A workflow_dispatch run's subject names a
 # branch instead, and AWS would refuse it.
-#
-# The environment is built from mootmaker-api and mootmaker-webapp main by the same
-# create-ephemeral-env.sh a person runs, as sibling checkouts. One database reset creates the API's
-# test fixture users, which the tests sign in as (see app/src/androidTest/.../acceptance/Acceptance.kt).
 name: acceptance
 
 on:
   pull_request:
     types: [labeled, synchronize, reopened]
 
-# One run per PR. Not cancelled by a newer push: a cancelled run still tears down, but finishing
-# and then starting the next is simpler to reason about than an interrupted create.
+# One run per PR. Not cancelled by a newer push: a cancelled run still tears down, but letting it
+# finish is simpler to reason about than an interrupted create.
 concurrency:
   group: acceptance-${{ github.event.pull_request.number }}
   cancel-in-progress: false
@@ -30,135 +32,18 @@ permissions:
   contents: read
 
 jobs:
-  acceptance:
+  release-build:
     if: >-
       contains(github.event.pull_request.labels.*.name, 'run-acceptance') &&
       (github.event.action != 'labeled' || github.event.label.name == 'run-acceptance')
-    runs-on: ubuntu-24.04
-    # Create is about 15 minutes, the emulator about 10, teardown about 10.
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v5
+    uses: ./.github/workflows/release-build.yml
+    with:
+      version: 0.0.0-pr${{ github.event.pull_request.number }}
+      signing: throwaway
 
-      # create-ephemeral-env.sh finds each component as a SIBLING directory, as on a workstation.
-      - uses: actions/checkout@v5
-        with:
-          repository: geoffweatherall/mootmaker-ephemeral-envs
-          path: siblings/mootmaker-ephemeral-envs
-      - uses: actions/checkout@v5
-        with:
-          repository: geoffweatherall/mootmaker-api
-          path: siblings/mootmaker-api
-      - uses: actions/checkout@v5
-        with:
-          repository: geoffweatherall/mootmaker-webapp
-          path: siblings/mootmaker-webapp
-
-      # Java 25 builds the API. Java 21, set up after it and so the default, runs Gradle below.
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-          cache-dependency-path: siblings/mootmaker-api/impl/pom.xml
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: siblings/mootmaker-webapp/webapp/package-lock.json
-      - uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_wrapper: false
-
-      - uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::431071856068:role/mootmaker-ephemeral-github-actions-deploy
-          aws-region: us-east-1
-
-      - name: Create the environment
-        id: env
-        working-directory: siblings/mootmaker-ephemeral-envs
-        run: |
-          set -o pipefail
-          # stderr is kept so that a create that fails partway can still be named and torn down.
-          ./create-ephemeral-env.sh and-acc 2> >(tee "$RUNNER_TEMP/create-stderr.log" >&2) > "$RUNNER_TEMP/create-stdout.log"
-          name="$(tail -n1 "$RUNNER_TEMP/create-stdout.log")"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-          echo "::notice title=Acceptance environment::${name}"
-
-      # The fixture users exist only after a reset; a fresh environment has none.
-      - name: Reset the database, creating the fixture users
-        env:
-          NAME: ${{ steps.env.outputs.name }}
-        run: |
-          function_name="$(aws ssm get-parameter --name "/mootmaker/${NAME}/api/database-reset/function-name" --query Parameter.Value --output text)"
-          aws lambda invoke --function-name "${function_name}" --payload '{}' --cli-binary-format raw-in-base64-out \
-            --query FunctionError --output text "$RUNNER_TEMP/reset.json" > "$RUNNER_TEMP/reset-error.txt"
-          if [[ "$(cat "$RUNNER_TEMP/reset-error.txt")" != "None" ]]; then
-            echo "::error title=Database reset failed::$(head -c 500 "$RUNNER_TEMP/reset.json")"
-            exit 1
-          fi
-
-      - name: Read the fixture users
-        run: .github/scripts/acceptance-args.sh "${{ steps.env.outputs.name }}"
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Acceptance tests on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          # bash with pipefail, so tee doesn't hide a failing Gradle exit code.
-          script: bash -c 'set -o pipefail; ./gradlew :app:connectedDebugAndroidTest $ACCEPTANCE_ARGS 2>&1 | tee build.log'
-
-      - name: Summarise failures
-        if: always()
-        run: |
-          if [[ -f build.log ]]; then .github/scripts/gradle-errors.sh build.log; fi
-          python3 .github/scripts/summarise-failures.py "app/build/outputs/androidTest-results/**/*.xml"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: acceptance-reports
-          path: |
-            build.log
-            app/build/outputs/androidTest-results
-            app/build/reports/androidTests
-
-      # Fresh credentials: the first set may have expired during a long run, and teardown is the
-      # step that must not fail.
-      - uses: aws-actions/configure-aws-credentials@v6
-        if: always()
-        with:
-          role-to-assume: arn:aws:iam::431071856068:role/mootmaker-ephemeral-github-actions-deploy
-          aws-region: us-east-1
-
-      # if: always() is the point: a failed or cancelled run must not leave an environment billing.
-      # The name comes from the create step, or from its stderr if create failed partway.
-      - name: Tear down the environment
-        if: always()
-        working-directory: siblings/mootmaker-ephemeral-envs
-        env:
-          NAME: ${{ steps.env.outputs.name }}
-        run: |
-          name="${NAME}"
-          if [[ -z "${name}" && -f "$RUNNER_TEMP/create-stderr.log" ]]; then
-            name="$(sed -nE "s/^Creating ephemeral environment '([^']+)'.*/\1/p" "$RUNNER_TEMP/create-stderr.log" | head -n1)"
-          fi
-          if [[ -z "${name}" ]]; then
-            echo "::notice title=Nothing to tear down::no environment was created"
-            exit 0
-          fi
-          ./teardown-ephemeral-env.sh "${name}" --yes
-          echo "::notice title=Acceptance environment torn down::${name}"
+  smoke-production:
+    needs: release-build
+    uses: ./.github/workflows/smoke.yml
+    with:
+      artifact-name: ${{ needs.release-build.outputs.artifact-name }}
+      environment: production

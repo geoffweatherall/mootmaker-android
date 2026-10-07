@@ -18,6 +18,10 @@ in the hub repository. Work one milestone at a time, as that document describes.
 - **Emulator tests run only in GitHub Actions.** Cloud sessions build debug variants only and never
   handle the release keystore.
 - `scripts/cloud-setup.sh` sets up the Android SDK in a cloud session.
+- **Acceptance runs on a PR labelled `run-acceptance`** (add it with
+  `gh api repos/geoffweatherall/mootmaker-android/issues/<n>/labels -f 'labels[]=run-acceptance'`).
+  It must be a `pull_request` event: AWS trusts this repository's token only then. It creates and
+  tears down its own `and-acc` environment.
 - **Times from the API are naive local date-times** (`2026-10-07T09:00:00`, no zone). Parse them
   as `LocalDateTime`, never `Instant` or `ZonedDateTime`.
 - **CI failures arrive as check-run annotations**, written by `.github/scripts/summarise-failures.py`

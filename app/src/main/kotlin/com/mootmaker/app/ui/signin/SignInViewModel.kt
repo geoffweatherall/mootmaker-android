@@ -26,13 +26,19 @@ class SignInViewModel(
     private val _state = MutableStateFlow(SignInState())
     val state: StateFlow<SignInState> = _state.asStateFlow()
 
-    private var prefilled = false
+    private var prefilled: Pair<String, String> = "" to ""
 
-    /** Pre-fills the publicly known demo user's credentials, once, as the webapp does. */
+    /**
+     * Pre-fills the publicly known demo user's credentials, as the webapp does. Called again with
+     * another environment's demo user after an environment switch, it replaces the first ones, but
+     * never anything the person has typed.
+     */
     fun prefill(email: String?, password: String?) {
-        if (prefilled || email.isNullOrBlank() || password.isNullOrBlank()) return
-        prefilled = true
-        _state.update { if (it.email.isEmpty() && it.password.isEmpty()) it.copy(email = email, password = password) else it }
+        if (email.isNullOrBlank() || password.isNullOrBlank()) return
+        _state.update {
+            if (it.email to it.password == prefilled) it.copy(email = email, password = password) else it
+        }
+        prefilled = email to password
     }
 
     fun onEmailChange(email: String) = _state.update { it.copy(email = email, emailError = null) }

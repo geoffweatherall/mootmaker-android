@@ -15,6 +15,10 @@ in the hub repository.
 | `testing/` | Fakes shared by every test layer, notably `FakeBackend` (config, Cognito and GraphQL in OkHttp) |
 | `scripts/cloud-setup.sh` | Installs the Android SDK in a cloud session and warms Gradle |
 | `.github/workflows/pr-checks.yml` | Build, lint, unit, Robolectric and screenshot tests, plus an emulator job |
+| `.github/workflows/acceptance.yml` | On a PR labelled `run-acceptance`: runs `release-build.yml` with a throwaway key, then `smoke.yml` against production |
+| `.github/workflows/release-build.yml` | Called by mootmaker-release's `release.yml`: builds and signs the release APK once, runs the acceptance suite against it in a fresh ephemeral environment, uploads it |
+| `.github/workflows/smoke.yml` | Called by `release.yml`: the Maestro demo sign-in (`smoke/demo-sign-in.yaml`) with the release APK against a named environment |
+| `app/src/androidTest/.../acceptance/` | The acceptance suite (use cases B and D.22–D.24), against a real environment's fixture users. Excluded from pr-checks |
 
 ## Building
 

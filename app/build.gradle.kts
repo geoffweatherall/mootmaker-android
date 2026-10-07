@@ -5,6 +5,20 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+// The release version, e.g. 6.1.0, passed by release-build.yml as -PmootmakerVersion. Local and PR
+// builds have none. versionCode is major x 1,000,000 + minor x 1,000 + patch (design choice 7), so it
+// always increases with the version; a pre-release suffix such as -rc1 is ignored.
+val releaseVersion: String? = providers.gradleProperty("mootmakerVersion").orNull
+val releaseVersionCode: Int? = releaseVersion?.let { version ->
+    val parts = version.substringBefore('-').split('.').map { it.toInt() }
+    require(parts.size == 3) { "mootmakerVersion must be major.minor.patch, not $version" }
+    parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
+}
+
+// The release signing key, decoded to a file by release-build.yml. Never present in a cloud session,
+// which builds debug variants only.
+val keystoreFile: String? = providers.environmentVariable("MOOTMAKER_KEYSTORE_FILE").orNull
+
 android {
     namespace = "com.mootmaker.app"
     compileSdk = 35
@@ -14,12 +28,30 @@ android {
         applicationId = "com.mootmaker.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.0"
+        versionCode = releaseVersionCode?.coerceAtLeast(1) ?: 1
+        versionName = releaseVersion ?: "0.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (keystoreFile != null) {
+            create("release") {
+                storeFile = file(keystoreFile)
+                storePassword = providers.environmentVariable("MOOTMAKER_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("MOOTMAKER_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("MOOTMAKER_KEY_PASSWORD").get()
+            }
+        }
+    }
+
+    // release-build.yml runs the acceptance suite against the release build itself, so the APK that
+    // passed is the APK that ships. Everywhere else the instrumented tests use debug.
+    testBuildType = providers.gradleProperty("mootmakerTestBuildType").getOrElse("debug")
+
     buildTypes {
+        release {
+            if (keystoreFile != null) signingConfig = signingConfigs.getByName("release")
+        }
         debug {
             // Lets a debug build sit beside the published app on one phone.
             applicationIdSuffix = ".debug"

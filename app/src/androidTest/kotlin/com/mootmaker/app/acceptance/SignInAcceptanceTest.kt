@@ -1,6 +1,7 @@
 package com.mootmaker.app.acceptance
 
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -8,7 +9,6 @@ import androidx.test.core.app.ActivityScenario
 import com.mootmaker.app.MainActivity
 import org.junit.After
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.util.UUID
@@ -38,13 +38,11 @@ class SignInAcceptanceTest {
         compose.waitForText("Create an account")
         assertFalse(compose.shown("E2E Standard"))
 
-        // Signed out is locked down: Back leaves the app rather than returning to home.
-        var finishing = false
-        scenario.onActivity {
-            it.onBackPressedDispatcher.onBackPressed()
-            finishing = it.isFinishing
-        }
-        assertTrue("Back after sign-out should leave the app", finishing)
+        // Signed out is locked down: Back leaves the app rather than returning to home. Android 12+
+        // moves a task's root activity to the back instead of finishing it, so "left" means no
+        // longer resumed, not necessarily destroyed.
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(10_000) { scenario.state != Lifecycle.State.RESUMED }
     }
 
     /** B.9: a wrong password shows an error and doesn't sign in. */

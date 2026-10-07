@@ -126,6 +126,27 @@ class SignInScreenTest {
     }
 
     @Test
+    fun anotherEnvironmentsDemoUserReplacesThePrefill() {
+        val viewModel = show(SignInConfig.Ready(hasDemoUser = true))
+        compose.runOnIdle {
+            viewModel.prefill("demo@mootmaker.com", "demo-password")
+            viewModel.prefill("demo@test.mootmaker.com", "test-password")
+        }
+
+        compose.onNodeWithText("demo@test.mootmaker.com").assertIsDisplayed()
+    }
+
+    @Test
+    fun aPrefillNeverReplacesWhatWasTyped() {
+        val viewModel = show(SignInConfig.Ready(hasDemoUser = true))
+        compose.runOnIdle { viewModel.prefill("demo@mootmaker.com", "demo-password") }
+        fill("pat@example.com", "secret")
+        compose.runOnIdle { viewModel.prefill("demo@test.mootmaker.com", "test-password") }
+
+        compose.onNodeWithText("pat@example.com").assertIsDisplayed()
+    }
+
+    @Test
     fun aConfigThatWontLoadOffersARetry() {
         show(SignInConfig.Failed("test"))
         compose.onNodeWithText("Couldn't load Mootmaker's settings for test. Check your connection and try again.").assertIsDisplayed()
