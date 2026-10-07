@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
@@ -156,6 +157,8 @@ class Api(private val account: Acceptance.Account) {
 private const val TIMEOUT_MS = 30_000L
 
 fun ComposeTestRule.shown(text: String) = onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+
+fun ComposeTestRule.onAllNodesWithTextFirst(text: String): SemanticsNodeInteraction = onAllNodes(hasText(text)).onFirst()
 
 fun ComposeTestRule.waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
 

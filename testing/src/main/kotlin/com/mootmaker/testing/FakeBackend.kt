@@ -20,7 +20,7 @@ import okio.Buffer
 import java.io.IOException
 import java.time.LocalDate
 
-data class FakeRoom(val id: String, val name: String, val color: String? = null)
+data class FakeRoom(val id: String, val name: String, val color: String? = null, val capacity: Int = 6)
 
 data class FakeMeeting(
     val id: String,
@@ -54,6 +54,10 @@ class FakeBackend : Interceptor {
     var timeFormat = "TwentyFourHour"
     var rooms = listOf(FakeRoom("room-1", "Boardroom"), FakeRoom("room-2", "Atrium", "Green"))
     var meetings: List<FakeMeeting> = emptyList()
+
+    /** The navigation window the API reports (`workspace.boundaries`). */
+    var earliestRetainedDate: String = "2000-01-03"
+    var latestBookableDate: String = "2100-01-01"
 
     /** Every request's short description ("cognito InitiateAuth", "graphql Home"...), in order. */
     val requests = mutableListOf<String>()
@@ -146,6 +150,7 @@ class FakeBackend : Interceptor {
                                     put("id", room.id)
                                     put("name", room.name)
                                     put("color", room.color)
+                                    put("capacity", room.capacity)
                                 },
                             )
                         }
@@ -164,6 +169,10 @@ class FakeBackend : Interceptor {
                         }
                     },
                 )
+                putJsonObject("boundaries") {
+                    put("earliestRetainedDate", earliestRetainedDate)
+                    put("latestBookableDate", latestBookableDate)
+                }
             }
         }
     }.toString()
