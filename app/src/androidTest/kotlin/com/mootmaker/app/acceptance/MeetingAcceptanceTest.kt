@@ -1,10 +1,12 @@
 package com.mootmaker.app.acceptance
 
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
 import com.mootmaker.app.MainActivity
 import org.junit.After
@@ -61,7 +63,7 @@ class MeetingAcceptanceTest {
 
         compose.onNodeWithContentDescription("Back").performClick()
         // Home keeps the scroll position it was left at, so scroll back up to its entry points.
-        compose.scrollHomeTo(hasText("Rooms today"))
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Rooms today"))
     }
 
     /** H.69: a meeting you attend but did not organise, seen as that attendee. */
