@@ -45,9 +45,9 @@ interface HomeSource {
  * Loads the home screen through the API's composite `workspace` entry point: one request for
  * `me`, the rooms and today's and tomorrow's days.
  *
- * Refetches on every call. Apollo Kotlin's normalized cache behaves differently from the webapp's
- * Apollo Client, so the design defers caching to M6 and starts with "refetch when a screen becomes
- * visible".
+ * Refetches on every call, with no cache in between. That is the Android form of the webapp's
+ * evict-and-refetch: a screen refetches when it becomes visible and when a live broadcast arrives
+ * (M6), so nothing here can be stale for longer than the next of those.
  */
 class HomeRepository(
     private val apollo: suspend () -> ApolloClient,
