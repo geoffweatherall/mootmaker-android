@@ -205,9 +205,14 @@ class MeetingChangeAcceptanceTest {
         compose.onNodeWithContentDescription("Cancel meeting").performClick()
         compose.waitForText("Cancel this meeting?")
         admin.cancelMeeting(meeting)
-        button("Cancel meeting").performClick()
+        // Live updates (M6) can reach the open screen before this click. Then the screen has already
+        // dropped the dialog and says "Meeting not found.", so the click may find nothing to press.
+        // Either way the person is told the meeting is gone, which is what this case is about.
+        runCatching { button("Cancel meeting").performClick() }
 
-        compose.waitForText("This meeting no longer exists - it may have been deleted.")
+        compose.waitUntil(30_000) {
+            compose.shown("This meeting no longer exists - it may have been deleted.") || compose.shown("Meeting not found.")
+        }
     }
 
     /** An edit made from a copy someone else has since changed is refused, and theirs stays. */
