@@ -56,6 +56,23 @@ class FakeBackend : Interceptor {
     /** A Cognito error type to fail the password check with, e.g. "NotAuthorizedException". */
     var signInError: Pair<String, String>? = null
 
+    /** A Cognito error (type to message) to refuse the next SignUp with, e.g. "UsernameExistsException". */
+    var signUpError: Pair<String, String>? = null
+
+    /** The only verification code ConfirmSignUp and ConfirmForgotPassword accept. */
+    var verificationCode = "123456"
+
+    /** What the last SignUp registered, as `email/name`, and the last password Cognito was given. */
+    var signedUp: String? = null
+    var lastPassword: String? = null
+
+    /** The last email a reset code was asked for. Any email succeeds, as with prevent_user_existence_errors. */
+    var resetRequestedFor: String? = null
+
+    /** A GraphQL error message to refuse `deleteMyAccount` with, as the API does for a reserved account. */
+    var deleteAccountError: String? = null
+    var accountDeleted = false
+
     var personId: String? = "person-1"
     var personName = "Pat Example"
 
@@ -146,9 +163,34 @@ class FakeBackend : Interceptor {
                 respond(chain, 400, buildJsonObject { put("__type", type); put("message", message) }.toString())
             } ?: respond(chain, 200, authResult(includeRefresh = true))
             "RevokeToken" -> respond(chain, 200, "{}")
+            "SignUp" -> signUpError?.let { (type, message) -> cognitoError(chain, type, message) } ?: run {
+                val email = json["Username"]!!.jsonPrimitive.content
+                val name = (json["UserAttributes"] as JsonArray).map { it.jsonObject }
+                    .first { it["Name"]!!.jsonPrimitive.content == "name" }["Value"]!!.jsonPrimitive.content
+                signedUp = "$email/$name"
+                lastPassword = json["Password"]!!.jsonPrimitive.content
+                // The new account is who signs in next.
+                demoEmail = email
+                personName = name
+                respond(chain, 200, """{"UserConfirmed":false,"UserSub":"fake-sub"}""")
+            }
+            "ConfirmSignUp", "ConfirmForgotPassword" ->
+                if (json["ConfirmationCode"]!!.jsonPrimitive.content != verificationCode) {
+                    cognitoError(chain, "CodeMismatchException", "Invalid verification code provided, please try again.")
+                } else {
+                    json["Password"]?.let { lastPassword = it.jsonPrimitive.content }
+                    respond(chain, 200, "{}")
+                }
+            "ForgotPassword" -> {
+                resetRequestedFor = json["Username"]!!.jsonPrimitive.content
+                respond(chain, 200, """{"CodeDeliveryDetails":{"DeliveryMedium":"EMAIL"}}""")
+            }
             else -> respond(chain, 400, """{"__type":"InvalidAction","message":"Unsupported in the fake"}""")
         }
     }
+
+    private fun cognitoError(chain: Interceptor.Chain, type: String, message: String): Response =
+        respond(chain, 400, buildJsonObject { put("__type", type); put("message", message) }.toString())
 
     private fun authResult(includeRefresh: Boolean): String = buildJsonObject {
         putJsonObject("AuthenticationResult") {
@@ -176,6 +218,7 @@ class FakeBackend : Interceptor {
             "RequestAvatarUpload" -> return respond(chain, 200, requestAvatarUploadResponse(variables!!["contentType"]!!.jsonPrimitive.content))
             "ConfirmAvatarUpload" -> return respond(chain, 200, personResult("confirmAvatarUpload", personId?.also { avatarUrl = "https://$AVATAR_HOST/v1/$it/${uploadedBytes?.size ?: 0}.png" }))
             "RemoveAvatar" -> return respond(chain, 200, personResult("removeAvatar", personId?.also { avatarUrl = null }))
+            "DeleteMyAccount" -> return respond(chain, 200, deleteAccountResponse())
             "RespondToMeeting" -> return respond(chain, 200, respondResponse(variables!!["meetingId"]!!.jsonPrimitive.content, variables["status"]!!.jsonPrimitive.content))
         }
         val dates = (request["variables"]?.jsonObject?.get("dates") as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
@@ -317,6 +360,17 @@ class FakeBackend : Interceptor {
             }
         }
     }.toString()
+
+    /** A reserved account is refused with a GraphQL error, as the API refuses the demo user. */
+    private fun deleteAccountResponse(): String = deleteAccountError?.let { message ->
+        buildJsonObject {
+            put("data", JsonNull)
+            put("errors", buildJsonArray { add(buildJsonObject { put("message", message) }) })
+        }.toString()
+    } ?: run {
+        accountDeleted = true
+        """{"data":{"deleteMyAccount":true}}"""
+    }
 
     private fun cancelMeetingResponse(id: String): String {
         val found = meetings.any { it.id == id }

@@ -92,6 +92,30 @@ class Session(
         _state.value = SessionState.SignedIn(IdTokenClaims.parse(signedIn.idToken))
     }
 
+    /** Starts a sign-up; Cognito emails a code to [email]. Throws [CognitoException] or an IOException. */
+    suspend fun signUp(email: String, password: String, name: String) = cognito().signUp(email, password, name)
+
+    /** Confirms the sign-up, then signs in with the same password, as the webapp does (use case A.1). */
+    suspend fun confirmSignUp(email: String, code: String, password: String) {
+        cognito().confirmSignUp(email, code)
+        signIn(email, password)
+    }
+
+    /** Asks Cognito to email a reset code. Succeeds the same way for an email with no account (C.17). */
+    suspend fun forgotPassword(email: String) = cognito().forgotPassword(email)
+
+    /** Sets the new password, then signs in with it (use case C.16). */
+    suspend fun resetPassword(email: String, code: String, newPassword: String) {
+        cognito().confirmForgotPassword(email, code, newPassword)
+        signIn(email, newPassword)
+    }
+
+    private fun cognito(): CognitoClient {
+        val config = (config.value as? ConfigState.Ready)?.config
+            ?: throw IllegalStateException("The app's settings haven't loaded yet.")
+        return cognitoFor(config)
+    }
+
     suspend fun signOut() {
         val previous = tokenLock.withLock {
             val held = tokens

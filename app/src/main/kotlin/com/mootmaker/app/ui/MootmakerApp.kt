@@ -32,10 +32,14 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mootmaker.app.AppContainer
 import com.mootmaker.app.BuildConfig
-import com.mootmaker.app.WebLinks
-import com.mootmaker.app.openInCustomTab
 import com.mootmaker.app.shareLink
 import com.mootmaker.app.ui.about.AboutScreen
+import com.mootmaker.app.ui.account.ForgotPasswordActions
+import com.mootmaker.app.ui.account.ForgotPasswordScreen
+import com.mootmaker.app.ui.account.ForgotPasswordViewModel
+import com.mootmaker.app.ui.account.SignUpActions
+import com.mootmaker.app.ui.account.SignUpScreen
+import com.mootmaker.app.ui.account.SignUpViewModel
 import com.mootmaker.app.ui.addmeeting.AddMeetingActions
 import com.mootmaker.app.ui.addmeeting.AddMeetingScreen
 import com.mootmaker.app.ui.addmeeting.AddMeetingViewModel
@@ -68,6 +72,8 @@ import java.time.LocalDate
 
 private object Routes {
     const val SIGN_IN = "signin"
+    const val SIGN_UP = "signup"
+    const val FORGOT_PASSWORD = "forgot-password"
     const val HOME = "home"
     const val ABOUT = "about"
     const val SETTINGS = "settings"
@@ -107,8 +113,6 @@ fun MootmakerApp(container: AppContainer) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val links = WebLinks(configState.environment.siteUrl)
-    val open: (String) -> Unit = { openInCustomTab(context, it) }
 
     // Live updates run only while signed in and in the foreground; leaving either closes the socket.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -139,9 +143,41 @@ fun MootmakerApp(container: AppContainer) {
                 onPasswordChange = viewModel::onPasswordChange,
                 onSubmit = viewModel::submit,
                 onRetryConfig = { scope.launch { session.retryConfig() } },
-                onCreateAccount = { open(links.signUp()) },
-                onForgotPassword = { open(links.forgotPassword()) },
+                onCreateAccount = { navController.navigate(Routes.SIGN_UP) },
+                onForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) },
                 onAbout = { navController.navigate(Routes.ABOUT) },
+            )
+        }
+        // Both finish by signing in, and the session change then replaces the whole back stack with home.
+        composable(Routes.SIGN_UP) {
+            val viewModel = viewModel { SignUpViewModel(session::signUp, session::confirmSignUp) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            SignUpScreen(
+                state = state,
+                actions = SignUpActions(
+                    onName = viewModel::onName,
+                    onEmail = viewModel::onEmail,
+                    onPassword = viewModel::onPassword,
+                    onCode = viewModel::onCode,
+                    onSubmitDetails = viewModel::submitDetails,
+                    onSubmitCode = viewModel::submitCode,
+                    onSignIn = { navController.popBackStack(Routes.SIGN_IN, inclusive = false) },
+                ),
+            )
+        }
+        composable(Routes.FORGOT_PASSWORD) {
+            val viewModel = viewModel { ForgotPasswordViewModel(session::forgotPassword, session::resetPassword) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            ForgotPasswordScreen(
+                state = state,
+                actions = ForgotPasswordActions(
+                    onEmail = viewModel::onEmail,
+                    onCode = viewModel::onCode,
+                    onNewPassword = viewModel::onNewPassword,
+                    onSubmitEmail = viewModel::submitEmail,
+                    onSubmitReset = viewModel::submitReset,
+                    onSignIn = { navController.popBackStack(Routes.SIGN_IN, inclusive = false) },
+                ),
             )
         }
         composable(Routes.HOME) {
@@ -301,7 +337,7 @@ fun MootmakerApp(container: AppContainer) {
             )
         }
         composable(Routes.SETTINGS) {
-            val viewModel = viewModel { SettingsViewModel(container.settingsSource) }
+            val viewModel = viewModel { SettingsViewModel(container.settingsSource, onAccountDeleted = session::signOut) }
             val state by viewModel.state.collectAsStateWithLifecycle()
             LaunchedEffect(viewModel) { viewModel.load() }
             val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -324,6 +360,9 @@ fun MootmakerApp(container: AppContainer) {
                     onSaveFormats = viewModel::saveFormats,
                     onChoosePhoto = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     onRemovePhoto = viewModel::removeAvatar,
+                    onAskToDelete = viewModel::askToDelete,
+                    onKeepAccount = viewModel::keepAccount,
+                    onConfirmDelete = viewModel::confirmDelete,
                 ),
             )
         }

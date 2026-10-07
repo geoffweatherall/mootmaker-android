@@ -10,7 +10,7 @@ import java.io.IOException
 fun signInErrorMessage(error: Throwable): String = when (error) {
     is CognitoException -> when (error.type) {
         "TooManyRequestsException", "LimitExceededException" -> "Too many attempts. Wait a moment and try again."
-        "UserNotConfirmedException" -> "This account hasn't been confirmed yet. Finish signing up on the web first."
+        "UserNotConfirmedException" -> "This account hasn't been confirmed yet."
         else -> error.message
     }
     is IOException -> "Couldn't reach Mootmaker. Check your connection and try again."

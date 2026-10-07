@@ -2,8 +2,10 @@
 
 A native Android app, a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** milestone M1 (sign in and see your day) is being built. The app signs in with Cognito
-and shows your Today/Tomorrow agenda; features it doesn't have yet open the webapp. The plan is [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
+**Status:** milestones M0 to M8 are built: sign up, sign in and reset your password; your agenda,
+room availability, meeting details and person calendars; add, edit, cancel and respond to meetings,
+with live updates; settings, avatars and deleting your account. Admin screens (M9) are still
+webapp-only. The plan is [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
 in the hub repository.
 
 ## Layout
@@ -16,9 +18,10 @@ in the hub repository.
 | `scripts/cloud-setup.sh` | Installs the Android SDK in a cloud session and warms Gradle |
 | `.github/workflows/pr-checks.yml` | Build, lint, unit, Robolectric and screenshot tests, plus an emulator job |
 | `.github/workflows/acceptance.yml` | On a PR labelled `run-acceptance`: runs `release-build.yml` with a throwaway key, then `smoke.yml` against production |
-| `.github/workflows/release-build.yml` | Called by mootmaker-release's `release.yml`: builds and signs the release APK once, runs the acceptance suite against it in a fresh ephemeral environment, uploads it |
-| `.github/workflows/smoke.yml` | Called by `release.yml`: the Maestro demo sign-in (`smoke/demo-sign-in.yaml`) with the release APK against a named environment |
-| `app/src/androidTest/.../acceptance/` | The acceptance suite (use cases B and D.22–D.24), against a real environment's fixture users. Excluded from pr-checks |
+| `.github/workflows/release-build.yml` | Called by mootmaker-release's `release.yml`: builds and signs the release APK once, runs the acceptance suite and then `smoke/sign-up-lifecycle.yaml` against it in a fresh ephemeral environment, uploads it |
+| `.github/workflows/smoke.yml` | Called by `release.yml`: a Maestro flow with the release APK against a named environment. Production gets the read-only demo sign-in (`smoke/demo-sign-in.yaml`); test gets sign up with a real code, use, delete account (`smoke/sign-up-lifecycle.yaml`) |
+| `app/src/androidTest/.../acceptance/` | The acceptance suite, by use case, against a real environment's fixture users and, for sign-up and reset, real emailed codes. Excluded from pr-checks |
+| `email-helper/` | A small Node server the workflows start on the runner: it hands real Cognito codes from `mootmaker-email-testing`'s queue to the emulator (through `adb reverse tcp:8787 tcp:8787`) and to Maestro |
 
 ## Building
 

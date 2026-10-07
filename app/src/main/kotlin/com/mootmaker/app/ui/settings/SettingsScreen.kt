@@ -14,7 +14,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,6 +58,9 @@ data class SettingsActions(
     val onSaveFormats: () -> Unit,
     val onChoosePhoto: () -> Unit,
     val onRemovePhoto: () -> Unit,
+    val onAskToDelete: () -> Unit = {},
+    val onKeepAccount: () -> Unit = {},
+    val onConfirmDelete: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,7 +98,10 @@ private fun Sections(state: SettingsState, actions: SettingsActions) {
         NameSection(state, hasPerson, actions)
         HorizontalDivider()
         FormatSection(state, hasPerson, actions)
+        HorizontalDivider()
+        DeleteAccountSection(actions)
     }
+    if (state.deletion.confirming) DeleteAccountDialog(state.deletion, actions)
 }
 
 @Composable
@@ -142,6 +151,49 @@ private fun FormatSection(state: SettingsState, hasPerson: Boolean, actions: Set
     if (!hasPerson) NoPersonNote("Your account has no linked person yet, so these can't be changed here.")
     Button(onClick = actions.onSaveFormats, enabled = hasPerson && !state.formatStatus.saving) { Text("Save formats") }
     Outcome(state.formatStatus)
+}
+
+/** Everyone gets this, with or without a linked Person: it is the account that goes. */
+@Composable
+private fun DeleteAccountSection(actions: SettingsActions) {
+    SectionTitle("Delete account")
+    Text(
+        "Permanently deletes your account and everything linked to it. This can't be undone.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedButton(
+        onClick = actions.onAskToDelete,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+    ) { Text("Delete my account") }
+}
+
+/**
+ * The webapp's confirmation, word for word: it warns that meetings you organise are cancelled for
+ * everyone, since that reaches other people's calendars. No re-authentication, by the same decision
+ * (mootmaker/designs/archive/delete-my-account.md, "Confirm friction").
+ */
+@Composable
+private fun DeleteAccountDialog(deletion: DeletionState, actions: SettingsActions) {
+    AlertDialog(
+        onDismissRequest = { if (!deletion.deleting) actions.onKeepAccount() },
+        title = { Text("Delete your account?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                deletion.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Text(
+                    "This permanently deletes your account. All meetings you organise will be cancelled - other attendees " +
+                        "will no longer see them. Meetings you only attend will just have you removed from them. This can't be undone.",
+                )
+            }
+        },
+        dismissButton = { TextButton(onClick = actions.onKeepAccount, enabled = !deletion.deleting) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(onClick = actions.onConfirmDelete, enabled = !deletion.deleting) {
+                Text("Delete my account", color = MaterialTheme.colorScheme.error)
+            }
+        },
+    )
 }
 
 @Composable

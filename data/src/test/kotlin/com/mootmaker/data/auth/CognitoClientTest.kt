@@ -101,6 +101,62 @@ class CognitoClientTest {
         assertEquals("REFRESH_TOKEN_AUTH", body["AuthFlow"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun signUpSendsTheNameAsAUserAttribute() = runTest {
+        server.enqueue(json(200, """{"UserConfirmed":false,"UserSub":"sub"}"""))
+
+        client.signUp("new@example.com", "a-good-pw-123", "New Person")
+
+        val request = server.takeRequest()
+        assertEquals("AWSCognitoIdentityProviderService.SignUp", request.getHeader("X-Amz-Target"))
+        val body = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
+        assertEquals("android-client", body["ClientId"]!!.jsonPrimitive.content)
+        assertEquals("new@example.com", body["Username"]!!.jsonPrimitive.content)
+        assertEquals("a-good-pw-123", body["Password"]!!.jsonPrimitive.content)
+        assertEquals("""[{"Name":"name","Value":"New Person"}]""", body["UserAttributes"].toString())
+    }
+
+    @Test
+    fun aRefusedSignUpSurfacesCognitosError() = runTest {
+        server.enqueue(json(400, """{"__type":"InvalidPasswordException","message":"Password did not conform with policy: Password not long enough"}"""))
+
+        val error = runCatching { client.signUp("new@example.com", "short1", "New Person") }.exceptionOrNull() as CognitoException
+
+        assertEquals("InvalidPasswordException", error.type)
+        assertEquals("Password did not conform with policy: Password not long enough", error.message)
+    }
+
+    @Test
+    fun confirmSignUpSendsTheCode() = runTest {
+        server.enqueue(json(200, "{}"))
+
+        client.confirmSignUp("new@example.com", "123456")
+
+        val request = server.takeRequest()
+        assertEquals("AWSCognitoIdentityProviderService.ConfirmSignUp", request.getHeader("X-Amz-Target"))
+        val body = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
+        assertEquals("new@example.com", body["Username"]!!.jsonPrimitive.content)
+        assertEquals("123456", body["ConfirmationCode"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun forgotPasswordThenConfirmSetsTheNewPassword() = runTest {
+        server.enqueue(json(200, """{"CodeDeliveryDetails":{"DeliveryMedium":"EMAIL"}}"""))
+        server.enqueue(json(200, "{}"))
+
+        client.forgotPassword("pat@example.com")
+        client.confirmForgotPassword("pat@example.com", "654321", "a-new-pw-456")
+
+        val forgot = server.takeRequest()
+        assertEquals("AWSCognitoIdentityProviderService.ForgotPassword", forgot.getHeader("X-Amz-Target"))
+        assertEquals("pat@example.com", Json.parseToJsonElement(forgot.body.readUtf8()).jsonObject["Username"]!!.jsonPrimitive.content)
+        val confirm = server.takeRequest()
+        assertEquals("AWSCognitoIdentityProviderService.ConfirmForgotPassword", confirm.getHeader("X-Amz-Target"))
+        val body = Json.parseToJsonElement(confirm.body.readUtf8()).jsonObject
+        assertEquals("654321", body["ConfirmationCode"]!!.jsonPrimitive.content)
+        assertEquals("a-new-pw-456", body["Password"]!!.jsonPrimitive.content)
+    }
+
     private suspend fun signInFailure(): CognitoException {
         try {
             client.signIn("demo@mootmaker.com", "wrong")

@@ -1,7 +1,12 @@
 # Release smoke: installs a release APK built earlier in the same workflow run on an emulator and
-# runs the read-only demo sign-in Maestro flow (smoke/demo-sign-in.yaml) against a named
-# environment. Called by mootmaker-release/release.yml after each deploy, and by acceptance.yml
-# against production, which proves this workflow on a pull request. Nothing is written.
+# runs a Maestro flow against a named environment. Called by mootmaker-release/release.yml after
+# each deploy, and by acceptance.yml against production, which proves this workflow on a pull
+# request.
+#   - production: the read-only demo sign-in (smoke/demo-sign-in.yaml). Nothing is written.
+#   - anything else (test): sign up with a real emailed code, use the app, delete the account
+#     (smoke/sign-up-lifecycle.yaml), the shape of the webapp's test-stage.spec.ts (design M8). Codes
+#     come from the email helper, which needs AWS to read the shared queue. release-build.yml runs
+#     the same flow against its own ephemeral environment, which is how a pull request proves it.
 name: Smoke
 
 on:
@@ -21,8 +26,10 @@ on:
         type: string
         default: ''
 
+# id-token for the email helper's AWS access on test. A caller must grant it too.
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   smoke:
@@ -45,6 +52,20 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # Only a writing flow needs codes. smoke.yml reaches test only from release.yml, whose token
+      # (mootmaker-release at main) the release role trusts.
+      - uses: actions/setup-node@v5
+        if: inputs.environment != 'production'
+        with:
+          node-version: '24'
+      - uses: aws-actions/configure-aws-credentials@v6
+        if: inputs.environment != 'production'
+        with:
+          role-to-assume: arn:aws:iam::431071856068:role/mootmaker-release-github-actions-deploy
+          aws-region: us-east-1
+      - name: Start the email helper
+        if: inputs.environment != 'production'
+        run: .github/scripts/start-email-helper.sh
       - name: Install Maestro
         run: |
           curl -fsSL https://get.maestro.mobile.dev | bash
@@ -58,6 +79,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ENVIRONMENT: ${{ inputs.environment }}
+          FLOW: ${{ inputs.environment == 'production' && 'smoke/demo-sign-in.yaml' || 'smoke/sign-up-lifecycle.yaml' }}
         with:
           api-level: 34
           arch: x86_64
@@ -65,7 +87,7 @@ jobs:
           disable-animations: true
           script: |
             adb install -r apk/*.apk
-            bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENVIRONMENT" smoke/demo-sign-in.yaml 2>&1 | tee smoke.log'
+            bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENVIRONMENT" "$FLOW" 2>&1 | tee smoke.log'
       - name: Summarise failures
         if: always()
         run: python3 .github/scripts/summarise-failures.py "maestro-report.xml"

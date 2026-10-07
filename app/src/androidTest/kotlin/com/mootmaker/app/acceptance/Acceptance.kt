@@ -278,6 +278,19 @@ class Api(private val account: Acceptance.Account) {
         meeting(id)?.get("attendees")?.jsonArray?.map { it.jsonObject }
             ?.firstOrNull { it["person"]!!.jsonObject.string("id") == personId }?.string("status")
 
+    /** The subjects of every meeting on [date] (`2026-10-07`), as the caller sees them. */
+    fun subjectsOn(date: String): List<String> = query(
+        "query(\$d: [String!]) { workspace(dates: \$d) { days { meetings { subject } } } }",
+        buildJsonObject { put("d", JsonArray(listOf(JsonPrimitive(date)))) },
+    )["workspace"]!!.jsonObject["days"]!!.jsonArray.flatMap { day ->
+        day.jsonObject["meetings"]!!.jsonArray.map { it.jsonObject.string("subject") }
+    }
+
+    /** Deletes the caller's own account. Tests that create an account use it to leave nothing behind. */
+    fun deleteMyAccount() {
+        check(query("mutation { deleteMyAccount }")["deleteMyAccount"]!!.jsonPrimitive.content == "true") { "deleteMyAccount returned false" }
+    }
+
     private fun checkNoErrors(result: JsonObject) {
         val errors = result["errors"]!!.jsonArray
         check(errors.isEmpty()) { "Mutation rejected: $errors" }

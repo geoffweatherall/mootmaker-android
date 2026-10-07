@@ -64,3 +64,10 @@ mutation RemoveAvatar($personId: ID!) {
     errors
   }
 }
+
+# Deletes the caller's account outright: their Person, their Cognito user, every upcoming meeting
+# they organise, and their place in the ones they attend. Reserved accounts (the demo user) get a
+# GraphQL error instead.
+mutation DeleteMyAccount {
+  deleteMyAccount
+}
