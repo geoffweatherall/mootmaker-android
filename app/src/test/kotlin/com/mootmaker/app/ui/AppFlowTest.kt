@@ -33,13 +33,19 @@ import java.time.LocalDate
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w411dp-h891dp")
 class AppFlowTest {
+    /**
+     * When today's meetings start. An hour that is not the current one, so no meeting is in progress
+     * (a different, time-dependent room status) whenever the suite runs.
+     */
+    private val meetingHour = if (java.time.LocalTime.now().hour == 9) 15 else 9
+
     @get:Rule
     val compose = createEmptyComposeRule()
 
     private val backend = FakeBackend().apply {
         val today = LocalDate.now()
         meetings = listOf(
-            FakeBackend.meeting("m1", "Stand-up", today, 9),
+            FakeBackend.meeting("m1", "Stand-up", today, meetingHour),
             FakeBackend.meeting("m2", "Someone else's meeting", today, 10, organiserId = "person-2"),
             FakeBackend.meeting("m3", "Planning", today.plusDays(1), 11),
         )
@@ -163,8 +169,8 @@ class AppFlowTest {
     fun roomsTodayOpensAvailabilityAndTheNextDayCanBeViewed() {
         val today = LocalDate.now()
         backend.meetings = listOf(
-            FakeBackend.meeting("a1", "Board sync", today, 9, roomId = "room-1"),
-            FakeBackend.meeting("a2", "Atrium chat", today, 9, roomId = "room-2"),
+            FakeBackend.meeting("a1", "Board sync", today, meetingHour, roomId = "room-1"),
+            FakeBackend.meeting("a2", "Atrium chat", today, meetingHour, roomId = "room-2"),
             FakeBackend.meeting("a3", "Tomorrow only", today.plusDays(1), 11, roomId = "room-1"),
         )
         useFakeBackend(backend)
@@ -195,7 +201,7 @@ class AppFlowTest {
     fun anAgendaRowOpensItsMeetingDetailsAndBackReturnsHome() {
         val today = LocalDate.now()
         backend.meetings = listOf(
-            FakeBackend.meeting("m1", "Stand-up", today, 9, organiserId = "person-2")
+            FakeBackend.meeting("m1", "Stand-up", today, meetingHour, organiserId = "person-2")
                 .copy(attendeeIds = listOf("person-1"), responses = mapOf("person-1" to "Going")),
         )
         useFakeBackend(backend)
@@ -209,7 +215,7 @@ class AppFlowTest {
         waitForText("Attendees · 1")
         compose.onNodeWithText("Sam Other").assertIsDisplayed()
         compose.onNodeWithText("You").assertIsDisplayed()
-        compose.onNodeWithText("09:00–10:00").assertIsDisplayed()
+        compose.onNodeWithText("%02d:00–%02d:00".format(meetingHour, meetingHour + 1)).assertIsDisplayed()
         compose.onNodeWithText("$today").assertIsDisplayed()
         assertTrue("graphql MeetingDetails" in backend.requests)
 
@@ -221,7 +227,7 @@ class AppFlowTest {
     @Test
     fun aMeetingThatNoLongerExistsSaysSo() {
         val today = LocalDate.now()
-        backend.meetings = listOf(FakeBackend.meeting("m1", "Stand-up", today, 9))
+        backend.meetings = listOf(FakeBackend.meeting("m1", "Stand-up", today, meetingHour))
         useFakeBackend(backend)
         launch()
         waitForText("demo@mootmaker.com")
@@ -239,7 +245,7 @@ class AppFlowTest {
     @Test
     fun aBookingOnTheAvailabilityScreenOpensItsMeetingDetails() {
         val today = LocalDate.now()
-        backend.meetings = listOf(FakeBackend.meeting("a1", "Board sync", today, 9, roomId = "room-1"))
+        backend.meetings = listOf(FakeBackend.meeting("a1", "Board sync", today, meetingHour, roomId = "room-1"))
         useFakeBackend(backend)
         launch()
         waitForText("demo@mootmaker.com")
