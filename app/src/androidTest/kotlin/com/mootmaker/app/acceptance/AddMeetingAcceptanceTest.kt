@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import com.mootmaker.app.MainActivity
@@ -42,34 +43,35 @@ class AddMeetingAcceptanceTest {
         compose.waitForText("Organiser")
     }
 
-    private fun field(label: String) = compose.onNode(hasText(label) and hasClickAction())
+    // The form is taller than an emulator screen: scroll to a control before touching it.
+    private fun field(label: String) = compose.onNode(hasText(label) and hasClickAction()).performScrollTo()
 
     private fun pick(label: String, option: String) {
         field(label).performClick()
         compose.waitUntil(30_000) { compose.onAllNodes(hasText(option) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText(option) and hasClickAction()).performClick()
+        compose.onNode(hasText(option) and hasClickAction()).performScrollTo().performClick()
     }
 
     private fun typeSubject(subject: String) = compose.onNode(hasText("Subject") and hasSetTextAction()).performTextInput(subject)
 
-    private fun save() = compose.onNode(hasText("Save") and hasClickAction()).performClick()
+    private fun save() = compose.onNode(hasText("Save") and hasClickAction()).performScrollTo().performClick()
 
     /** F.38 and F.39: the organiser is you, and booking lands on the new meeting's details. */
     @Test
     fun aBookedMeetingOpensItsDetailsWithYouAsOrganiser() {
         val run = UUID.randomUUID().toString().take(6)
         val admin = Api(Acceptance.admin)
-        admin.createRoom("A-Add $run")
+        admin.createRoom("Z-Add $run")
 
         openForm()
         compose.waitForText(admin.myName())
         typeSubject("Booked $run")
-        pick("Room", "A-Add $run (capacity 6)")
+        pick("Room", "Z-Add $run (capacity 6)")
         save()
 
         compose.waitForText("Attendees · 0")
         assertTrue(compose.shown("Booked $run"))
-        assertTrue(compose.shown("A-Add $run"))
+        assertTrue(compose.shown("Z-Add $run"))
         assertTrue(compose.shown("${LocalDate.now()}"))
         // You organise it, so your own row says "You".
         assertTrue(compose.shown("You"))
@@ -110,7 +112,7 @@ class AddMeetingAcceptanceTest {
     fun aRoomTooSmallForThePeopleIsRejected() {
         val run = UUID.randomUUID().toString().take(6)
         val admin = Api(Acceptance.admin)
-        admin.createRoom("A-Tiny $run", capacity = 2)
+        admin.createRoom("Z-Tiny $run", capacity = 2)
         val guest = "Guest $run"
         admin.createPerson(guest)
 
@@ -121,7 +123,7 @@ class AddMeetingAcceptanceTest {
         compose.onNodeWithText(guest).performClick()
         compose.onNodeWithText(Api(Acceptance.standard).myName()).performClick()
         compose.onNodeWithText("Done").performClick()
-        pick("Room", "A-Tiny $run (capacity 2)")
+        pick("Room", "Z-Tiny $run (capacity 2)")
         save()
 
         compose.waitForText("The room does not have enough capacity for all attendees.")
@@ -132,13 +134,13 @@ class AddMeetingAcceptanceTest {
     fun aRoomAlreadyBookedForTheTimeIsRejected() {
         val run = UUID.randomUUID().toString().take(6)
         val admin = Api(Acceptance.admin)
-        val room = admin.createRoom("A-Busy $run")
+        val room = admin.createRoom("Z-Busy $run")
         val today = LocalDate.now()
         admin.createMeeting(room, admin.myPersonId(), "Taken $run", "${today}T00:00:00", "${today}T23:45:00")
 
         openForm()
         typeSubject("Clash $run")
-        pick("Room", "A-Busy $run (capacity 6)")
+        pick("Room", "Z-Busy $run (capacity 6)")
         save()
 
         compose.waitForText("The room already has a meeting scheduled during that time range.")
@@ -147,12 +149,9 @@ class AddMeetingAcceptanceTest {
     /** F.53: Suggest a room fills the Room field. Which room is the API's ranking, covered by its own tests. */
     @Test
     fun suggestARoomFillsTheRoomField() {
-        val run = UUID.randomUUID().toString().take(6)
-        Api(Acceptance.admin).createRoom("A-Sug $run")
-
         openForm()
         assertFalse(compose.shown("(capacity"))
-        compose.onNodeWithText("Suggest a room").performClick()
+        compose.onNodeWithText("Suggest a room").performScrollTo().performClick()
         compose.waitUntil(30_000) { compose.onAllNodes(hasText("(capacity", substring = true)).fetchSemanticsNodes().isNotEmpty() }
     }
 
