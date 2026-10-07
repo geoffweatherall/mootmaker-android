@@ -1,0 +1,36 @@
+# The home screen's one request: who you are, the rooms (for names and colours) and the days the
+# agenda shows. Selection is what the server charges for, so nothing else is asked for.
+query Home($dates: [String!]) {
+  workspace(dates: $dates) {
+    me {
+      id
+      name
+      timeFormat
+    }
+    rooms {
+      id
+      name
+      color
+    }
+    days {
+      date
+      meetings {
+        id
+        subject
+        startTime
+        endTime
+        room {
+          id
+        }
+        organiser {
+          id
+        }
+        attendees {
+          person {
+            id
+          }
+        }
+      }
+    }
+  }
+}

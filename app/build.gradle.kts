@@ -1,30 +1,67 @@
-import java.net.URI
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.apollo)
     alias(libs.plugins.roborazzi)
 }
 
-// Pinned version of the schema published by mootmaker-api (npm: @mootmaker/schema).
-val schemaVersion = "6.2.0"
+// The release version, e.g. 6.1.0, passed by release-build.yml as -PmootmakerVersion. Local and PR
+// builds have none. versionCode is major x 1,000,000 + minor x 1,000 + patch (design choice 7), so it
+// always increases with the version; a pre-release suffix such as -rc1 is ignored.
+val releaseVersion: String? = providers.gradleProperty("mootmakerVersion").orNull
+val releaseVersionCode: Int? = releaseVersion?.let { version ->
+    val parts = version.substringBefore('-').split('.').map { it.toInt() }
+    require(parts.size == 3) { "mootmakerVersion must be major.minor.patch, not $version" }
+    parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
+}
+
+// The release signing key, decoded to a file by release-build.yml. Never present in a cloud session,
+// which builds debug variants only.
+val keystoreFile: String? = providers.environmentVariable("MOOTMAKER_KEYSTORE_FILE").orNull
 
 android {
     namespace = "com.mootmaker.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mootmaker.app"
+        // Permanent: Android identifies the app by this on every device. See the design's choice 2.
+        applicationId = "com.mootmaker.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.0"
+        versionCode = releaseVersionCode?.coerceAtLeast(1) ?: 1
+        versionName = releaseVersion ?: "0.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildFeatures { compose = true }
+    signingConfigs {
+        if (keystoreFile != null) {
+            create("release") {
+                storeFile = file(keystoreFile)
+                storePassword = providers.environmentVariable("MOOTMAKER_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("MOOTMAKER_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("MOOTMAKER_KEY_PASSWORD").get()
+            }
+        }
+    }
+
+    // release-build.yml runs the acceptance suite against the release build itself, so the APK that
+    // passed is the APK that ships. Everywhere else the instrumented tests use debug.
+    testBuildType = providers.gradleProperty("mootmakerTestBuildType").getOrElse("debug")
+
+    buildTypes {
+        release {
+            if (keystoreFile != null) signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            // Lets a debug build sit beside the published app on one phone.
+            applicationIdSuffix = ".debug"
+        }
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
@@ -34,13 +71,20 @@ android {
 kotlin { jvmToolchain(21) }
 
 dependencies {
+    implementation(project(":data"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.apollo.runtime)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
 
+    testImplementation(project(":testing"))
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
@@ -48,34 +92,12 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit)
 
+    androidTestImplementation(project(":testing"))
+    androidTestImplementation(libs.kotlinx.serialization.json)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(platform(libs.compose.bom))
     debugImplementation(libs.compose.ui.test.manifest)
-}
-
-// Downloads the pinned schema from the public npm registry (no token needed) and extracts
-// mootmaker.graphql for Apollo's code generator.
-val fetchSchema by tasks.registering {
-    val outDir = layout.buildDirectory.dir("schema")
-    val version = schemaVersion
-    inputs.property("version", version)
-    outputs.dir(outDir)
-    doLast {
-        val dir = outDir.get().asFile.apply { mkdirs() }
-        val url = "https://registry.npmjs.org/@mootmaker/schema/-/schema-$version.tgz"
-        val tgz = File(dir, "schema.tgz")
-        URI(url).toURL().openStream().use { input -> tgz.outputStream().use { input.copyTo(it) } }
-        exec {
-            commandLine("tar", "xzf", tgz.absolutePath, "-C", dir.absolutePath, "--strip-components=1", "package/mootmaker.graphql")
-        }
-        tgz.delete()
-    }
-}
-
-apollo {
-    service("mootmaker") {
-        packageName.set("com.mootmaker.app.graphql")
-        schemaFiles.from(files(layout.buildDirectory.file("schema/mootmaker.graphql")).builtBy(fetchSchema))
-    }
 }

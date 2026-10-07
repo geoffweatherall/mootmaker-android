@@ -1,0 +1,279 @@
+# Reusable release build for mootmaker-android (design Q3-A): builds the signed release APK ONCE,
+# proves it against a fresh ephemeral environment by running the acceptance suite on an emulator
+# against that very build, tears the environment down whatever happens, and uploads the APK.
+# mootmaker-release/release.yml then smoke-tests and publishes those exact bytes.
+#
+# Two callers:
+#   - mootmaker-release/release.yml, with signing: release and the keystore passed explicitly as
+#     secrets. A reusable workflow sees its CALLER's secrets, never this repository's, and the
+#     keystore lives on mootmaker-release only. Its AWS token's subject is mootmaker-release at
+#     main, which the release role trusts. Environment kind rel-and.
+#   - acceptance.yml in this repository, on a labelled pull request, with signing: throwaway. The
+#     key is generated inside the job and thrown away with it, so a PR proves this whole workflow
+#     without the real key ever leaving mootmaker-release. A pull_request token is trusted only by
+#     the ephemeral role. Environment kind and-acc.
+# Which role and kind apply is decided from the event, because inside a called workflow the github
+# context is the caller's.
+name: Release build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version being released, without the leading v (e.g. 6.1.0). Sets versionName and versionCode.
+        required: true
+        type: string
+      ref:
+        description: >-
+          Commit, branch or tag of THIS repository to build. release.yml resolves main's SHA once and
+          passes it to every stage, so the tag it pushes names the commit that passed. Empty means
+          the caller's own commit (a pull request's head).
+        required: false
+        type: string
+        default: ''
+      signing:
+        description: '"release" (the real key, from secrets; fails if absent) or "throwaway" (generated for this run)'
+        required: true
+        type: string
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+    outputs:
+      artifact-name:
+        description: Name of the uploaded artifact holding the APK and its SHA-256.
+        value: ${{ jobs.build.outputs.artifact-name }}
+      commit-sha:
+        description: The commit of THIS repository that was built and tested. release.yml tags this one.
+        value: ${{ jobs.build.outputs.commit-sha }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    # Create is about 15 minutes, build and emulator about 15, teardown about 10.
+    timeout-minutes: 90
+    outputs:
+      artifact-name: ${{ steps.artifact.outputs.name }}
+      commit-sha: ${{ steps.sha.outputs.value }}
+    env:
+      AWS_ROLE: ${{ github.event_name == 'pull_request' && 'arn:aws:iam::431071856068:role/mootmaker-ephemeral-github-actions-deploy' || 'arn:aws:iam::431071856068:role/mootmaker-release-github-actions-deploy' }}
+      ENV_KIND: ${{ github.event_name == 'pull_request' && 'and-acc' || 'rel-and' }}
+    steps:
+      # `repository` is explicit: in a called workflow a bare checkout clones the CALLER's repository.
+      - uses: actions/checkout@v5
+        with:
+          repository: geoffweatherall/mootmaker-android
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record the commit being built
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # create-ephemeral-env.sh finds each component as a SIBLING directory, as on a workstation.
+      # The API and webapp come from main: they are what the app runs against here, not what is
+      # being released by this workflow.
+      - uses: actions/checkout@v5
+        with:
+          repository: geoffweatherall/mootmaker-ephemeral-envs
+          path: siblings/mootmaker-ephemeral-envs
+      - uses: actions/checkout@v5
+        with:
+          repository: geoffweatherall/mootmaker-api
+          path: siblings/mootmaker-api
+      - uses: actions/checkout@v5
+        with:
+          repository: geoffweatherall/mootmaker-webapp
+          path: siblings/mootmaker-webapp
+
+      # Java 25 builds the API (create step). Java 21, set up after it and so the default, runs Gradle.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+          cache-dependency-path: siblings/mootmaker-api/impl/pom.xml
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: siblings/mootmaker-webapp/webapp/package-lock.json
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The keystore is written outside the workspace and deleted at the end of the job.
+      - name: Prepare the signing key
+        env:
+          SIGNING: ${{ inputs.signing }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          keystore="$RUNNER_TEMP/mootmaker-release.jks"
+          case "${SIGNING}" in
+            release)
+              if [[ -z "${KEYSTORE_BASE64}" || -z "${KEYSTORE_PASSWORD}" || -z "${KEY_ALIAS}" || -z "${KEY_PASSWORD}" ]]; then
+                echo "::error title=No release key::signing: release needs ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD passed as secrets"
+                exit 1
+              fi
+              printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${keystore}"
+              ;;
+            throwaway)
+              KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
+              KEY_PASSWORD="${KEYSTORE_PASSWORD}"
+              KEY_ALIAS=throwaway
+              echo "::add-mask::${KEYSTORE_PASSWORD}"
+              keytool -genkeypair -keystore "${keystore}" -storetype PKCS12 -alias "${KEY_ALIAS}" \
+                -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Mootmaker throwaway" \
+                -storepass "${KEYSTORE_PASSWORD}" -keypass "${KEY_PASSWORD}" -noprompt
+              echo "::notice title=Throwaway signing key::this APK is signed with a key generated for this run, not the release key"
+              ;;
+            *)
+              echo "::error title=Unknown signing::signing must be release or throwaway, not '${SIGNING}'"
+              exit 1
+              ;;
+          esac
+          {
+            echo "MOOTMAKER_KEYSTORE_FILE=${keystore}"
+            echo "MOOTMAKER_KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}"
+            echo "MOOTMAKER_KEY_ALIAS=${KEY_ALIAS}"
+            echo "MOOTMAKER_KEY_PASSWORD=${KEY_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+      # The ONLY build of the app in a release, with its JVM tests. The test APK is built for the
+      # release build type, so the acceptance suite below runs against this exact app APK.
+      - name: Build and sign
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease :app:assembleReleaseAndroidTest :data:testDebugUnitTest :app:testDebugUnitTest \
+            -PmootmakerVersion="${{ inputs.version }}" -PmootmakerTestBuildType=release 2>&1 | tee build.log
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: us-east-1
+
+      - name: Create the environment
+        id: env
+        working-directory: siblings/mootmaker-ephemeral-envs
+        env:
+          # Gradle needed Java 21 as the default; the API's Maven build needs 25.
+          JAVA_HOME: ${{ env.JAVA_HOME_25_X64 }}
+        run: |
+          set -o pipefail
+          # stderr is kept so that a create that fails partway can still be named and torn down.
+          ./create-ephemeral-env.sh "${ENV_KIND}" 2> >(tee "$RUNNER_TEMP/create-stderr.log" >&2) > "$RUNNER_TEMP/create-stdout.log"
+          name="$(tail -n1 "$RUNNER_TEMP/create-stdout.log")"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Acceptance environment::${name}"
+
+      # The API's test fixture users exist only after a reset; a fresh environment has none.
+      - name: Reset the database, creating the fixture users
+        env:
+          NAME: ${{ steps.env.outputs.name }}
+        run: |
+          function_name="$(aws ssm get-parameter --name "/mootmaker/${NAME}/api/database-reset/function-name" --query Parameter.Value --output text)"
+          aws lambda invoke --function-name "${function_name}" --payload '{}' --cli-binary-format raw-in-base64-out \
+            --query FunctionError --output text "$RUNNER_TEMP/reset.json" > "$RUNNER_TEMP/reset-error.txt"
+          if [[ "$(cat "$RUNNER_TEMP/reset-error.txt")" != "None" ]]; then
+            echo "::error title=Database reset failed::$(head -c 500 "$RUNNER_TEMP/reset.json")"
+            exit 1
+          fi
+
+      - name: Read the fixture users
+        run: .github/scripts/acceptance-args.sh "${{ steps.env.outputs.name }}"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Acceptance tests on an emulator, against the release build
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          # bash with pipefail, so tee doesn't hide a failing Gradle exit code. Same flags as the
+          # build above, so Gradle reuses those APKs rather than building different ones.
+          script: bash -c 'set -o pipefail; ./gradlew :app:connectedReleaseAndroidTest -PmootmakerVersion=${{ inputs.version }} -PmootmakerTestBuildType=release $ACCEPTANCE_ARGS 2>&1 | tee -a build.log'
+
+      - name: Summarise failures
+        if: always()
+        run: |
+          if [[ -f build.log ]]; then .github/scripts/gradle-errors.sh build.log; fi
+          python3 .github/scripts/summarise-failures.py \
+            "app/build/outputs/androidTest-results/**/*.xml" "app/build/test-results/**/*.xml" "data/build/test-results/**/*.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-acceptance-reports-${{ inputs.version }}-${{ github.run_attempt }}
+          path: |
+            build.log
+            app/build/outputs/androidTest-results
+            app/build/reports/androidTests
+
+      # Fresh credentials: the first set may have expired during a long run, and teardown is the
+      # step that must not fail.
+      - uses: aws-actions/configure-aws-credentials@v6
+        if: always()
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: us-east-1
+
+      # if: always() is the point: a failed or cancelled run must not leave an environment billing.
+      - name: Tear down the environment
+        if: always()
+        working-directory: siblings/mootmaker-ephemeral-envs
+        env:
+          NAME: ${{ steps.env.outputs.name }}
+        run: |
+          name="${NAME}"
+          if [[ -z "${name}" && -f "$RUNNER_TEMP/create-stderr.log" ]]; then
+            name="$(sed -nE "s/^Creating ephemeral environment '([^']+)'.*/\1/p" "$RUNNER_TEMP/create-stderr.log" | head -n1)"
+          fi
+          if [[ -z "${name}" ]]; then
+            echo "::notice title=Nothing to tear down::no environment was created"
+            exit 0
+          fi
+          ./teardown-ephemeral-env.sh "${name}" --yes
+          echo "::notice title=Acceptance environment torn down::${name}"
+
+      - name: Delete the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/mootmaker-release.jks"
+
+      - name: Name the artifact
+        id: artifact
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          name="mootmaker-android-${VERSION}"
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/${name}.apk"
+          (cd "$RUNNER_TEMP/apk" && sha256sum "${name}.apk" > "${name}.apk.sha256")
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=APK built::${name}.apk $(cut -d' ' -f1 "$RUNNER_TEMP/apk/${name}.apk.sha256")"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ runner.temp }}/apk
+          if-no-files-found: error
+          retention-days: 30

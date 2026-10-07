@@ -1,0 +1,79 @@
+# Release smoke: installs a release APK built earlier in the same workflow run on an emulator and
+# runs the read-only demo sign-in Maestro flow (smoke/demo-sign-in.yaml) against a named
+# environment. Called by mootmaker-release/release.yml after each deploy, and by acceptance.yml
+# against production, which proves this workflow on a pull request. Nothing is written.
+name: Smoke
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: The artifact from release-build.yml holding the APK.
+        required: true
+        type: string
+      environment:
+        description: test, production, or an ephemeral environment's name.
+        required: true
+        type: string
+      ref:
+        description: Commit of THIS repository whose smoke flow to run. Empty means the caller's own commit.
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # `repository` is explicit: in a called workflow a bare checkout clones the CALLER's repository.
+      - uses: actions/checkout@v5
+        with:
+          repository: geoffweatherall/mootmaker-android
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: apk
+      - name: Check the APK's SHA-256
+        working-directory: apk
+        run: sha256sum -c ./*.sha256
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Smoke flow on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r apk/*.apk
+            bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENVIRONMENT" smoke/demo-sign-in.yaml 2>&1 | tee smoke.log'
+      - name: Summarise failures
+        if: always()
+        run: python3 .github/scripts/summarise-failures.py "maestro-report.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke-${{ inputs.environment }}-${{ github.run_attempt }}
+          path: |
+            smoke.log
+            maestro-report.xml
+            maestro-debug

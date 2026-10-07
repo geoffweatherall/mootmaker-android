@@ -3,6 +3,11 @@ name: pr-checks
 on:
   push:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment for the demo-user e2e test (blank = production), e.g. and-acc-261007-ab12'
+        type: string
+        default: ''
 
 concurrency:
   group: pr-checks-${{ github.ref }}
@@ -23,18 +28,26 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, lint, unit, Robolectric and screenshot tests
-        run: ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :app:recordRoborazziDebug
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug :app:lintDebug :data:testDebugUnitTest :app:verifyRoborazziDebug 2>&1 | tee build.log
       - name: Summarise failures
         if: always()
-        run: python3 .github/scripts/summarise-failures.py "app/build/test-results/**/*.xml"
+        run: |
+          .github/scripts/gradle-errors.sh build.log
+          python3 .github/scripts/summarise-failures.py "app/build/test-results/**/*.xml" "data/build/test-results/**/*.xml"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: build-reports
           path: |
+            build.log
             app/build/reports
             app/build/test-results
             app/build/outputs/roborazzi
+            app/build/outputs/apk/debug
+            data/build/reports
+            data/build/test-results
 
   emulator:
     runs-on: ubuntu-latest
@@ -52,6 +65,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
+      # e2e as the public demo user, read-only. See DemoUserE2eTest.
+      - name: Read the e2e environment's configuration
+        env:
+          E2E_ENVIRONMENT: ${{ inputs.environment }}
+        run: python3 .github/scripts/demo-e2e-args.py
       - name: Instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -59,12 +77,18 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest
+          # bash with pipefail, so tee doesn't hide a failing Gradle exit code.
+          script: bash -c 'set -o pipefail; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notPackage=com.mootmaker.app.acceptance $E2E_ARGS 2>&1 | tee build.log'
       - name: Summarise failures
         if: always()
-        run: python3 .github/scripts/summarise-failures.py "app/build/outputs/androidTest-results/**/*.xml"
+        run: |
+          .github/scripts/gradle-errors.sh build.log
+          python3 .github/scripts/summarise-failures.py "app/build/outputs/androidTest-results/**/*.xml"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: emulator-reports
-          path: app/build/outputs/androidTest-results
+          path: |
+            build.log
+            app/build/outputs/androidTest-results
+            app/build/reports/androidTests

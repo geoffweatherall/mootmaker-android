@@ -1,0 +1,49 @@
+# Acceptance on a pull request (design Q6-B: label-triggered, so it costs nothing until asked for).
+#
+# Run it by adding the `run-acceptance` label to a pull request. While the label stays on, every
+# push to the PR runs it again. A cloud session adds the label through the REST API
+# (POST repos/{owner}/{repo}/issues/{n}/labels), because the GitHub proxy blocks GraphQL.
+#
+# It runs the release pipeline's own Android stages, so a PR proves them before a release depends
+# on them:
+#   1. release-build.yml with a throwaway signing key: builds the release APK, creates an and-acc
+#      ephemeral environment, runs the acceptance suite (app/src/androidTest/.../acceptance) on an
+#      emulator against that APK, and tears the environment down whatever happens.
+#   2. smoke.yml with that APK against production: the read-only demo sign-in release.yml runs.
+#
+# Pull-request events only, deliberately. AWS trusts this repository's OIDC token only when its
+# subject is `repo:...:pull_request` (the ephemeral role in mootmaker-bootstrap-aws-accounts,
+# workload-account/github-actions-deploy-role.yaml). A workflow_dispatch run's subject names a
+# branch instead, and AWS would refuse it.
+name: acceptance
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+# One run per PR. Not cancelled by a newer push: a cancelled run still tears down, but letting it
+# finish is simpler to reason about than an interrupted create.
+concurrency:
+  group: acceptance-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  release-build:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'run-acceptance') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'run-acceptance')
+    uses: ./.github/workflows/release-build.yml
+    with:
+      version: 0.0.0-pr${{ github.event.pull_request.number }}
+      signing: throwaway
+
+  smoke-production:
+    needs: release-build
+    uses: ./.github/workflows/smoke.yml
+    with:
+      artifact-name: ${{ needs.release-build.outputs.artifact-name }}
+      environment: production

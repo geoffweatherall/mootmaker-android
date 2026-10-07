@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "mootmaker-android"
-include(":app")
+include(":app", ":data", ":testing")

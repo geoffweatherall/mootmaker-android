@@ -2,7 +2,7 @@
 
 A native Android app — a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** milestone M0 (toolchain spike) is in progress; the design is
+**Status:** M0 (toolchain spike) is done; M1 (sign in and see your day) is in progress; the design is
 [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
 in the hub repository. Work one milestone at a time, as that document describes.
 
@@ -12,12 +12,21 @@ in the hub repository. Work one milestone at a time, as that document describes.
   first**, then `../mootmaker-api`'s README. The API contract and the auth flow are the same; only
   the frontend differs.
 - **The schema is downloaded from the `@mootmaker/schema` npm package** at a pinned version (see
-  `app/build.gradle.kts`), not mirrored by hand.
+  `data/build.gradle.kts`), not mirrored by hand.
 - **`../mootmaker/docs/reference/use-cases.md` is tagged per frontend**: every case is
   **[All frontends]** or **[Webapp-specific]**, with an "android:" slot for its test-case link.
 - **Emulator tests run only in GitHub Actions.** Cloud sessions build debug variants only and never
   handle the release keystore.
 - `scripts/cloud-setup.sh` sets up the Android SDK in a cloud session.
+- **Acceptance runs on a PR labelled `run-acceptance`** (add it with
+  `gh api repos/geoffweatherall/mootmaker-android/issues/<n>/labels -f 'labels[]=run-acceptance'`).
+  It must be a `pull_request` event: AWS trusts this repository's token only then. It creates and
+  tears down its own `and-acc` environment.
+- **Times from the API are naive local date-times** (`2026-10-07T09:00:00`, no zone). Parse them
+  as `LocalDateTime`, never `Instant` or `ZonedDateTime`.
+- **CI failures arrive as check-run annotations**, written by `.github/scripts/summarise-failures.py`
+  (test failures) and `gradle-errors.sh` (compile and build errors). Logs and artifacts can't be
+  downloaded from a cloud session.
 
 ---
 
