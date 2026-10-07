@@ -13,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -53,10 +54,13 @@ class AvailabilityAcceptanceTest {
         val roomB = api.createRoom("A-Two $run")
         val me = api.myPersonId()
         val today = LocalDate.now()
+        // Hours that are not now, whenever the suite runs: a meeting in progress changes what a card shows.
+        val hour = if (LocalTime.now().hour in 8..13) 16 else 9
+        fun at(h: Int) = "${today}T%02d:00:00".format(h)
         // The same hour in two rooms, and two back-to-back meetings in room A, created out of order.
-        api.createMeeting(roomA, me, "Second $run", "${today}T11:00:00", "${today}T12:00:00")
-        api.createMeeting(roomA, me, "First $run", "${today}T10:00:00", "${today}T11:00:00")
-        api.createMeeting(roomB, me, "Other room $run", "${today}T10:00:00", "${today}T11:00:00")
+        api.createMeeting(roomA, me, "Second $run", at(hour + 1), at(hour + 2))
+        api.createMeeting(roomA, me, "First $run", at(hour), at(hour + 1))
+        api.createMeeting(roomB, me, "Other room $run", at(hour), at(hour + 1))
 
         openAvailabilityAsAdmin()
         compose.waitForText("A-One $run")
