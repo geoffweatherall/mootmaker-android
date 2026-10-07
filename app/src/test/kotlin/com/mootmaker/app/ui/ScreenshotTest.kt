@@ -3,6 +3,9 @@ package com.mootmaker.app.ui
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mootmaker.app.ui.addmeeting.AddMeetingActions
+import com.mootmaker.app.ui.addmeeting.AddMeetingScreen
+import com.mootmaker.app.ui.addmeeting.AddMeetingState
 import com.mootmaker.app.ui.calendar.CalendarScreen
 import com.mootmaker.app.ui.meeting.MeetingDetailsScreen
 import com.mootmaker.app.ui.availability.AvailabilityState
@@ -14,7 +17,13 @@ import com.mootmaker.app.ui.signin.SignInScreen
 import com.mootmaker.app.ui.signin.SignInState
 import com.mootmaker.app.ui.theme.MootmakerTheme
 import com.mootmaker.data.agenda.TimeFormat
+import com.mootmaker.data.agenda.DateFormat
 import com.mootmaker.data.api.HomeData
+import com.mootmaker.data.meeting.MeetingFormReference
+import com.mootmaker.data.meeting.PersonOption
+import com.mootmaker.data.meeting.RoomOption
+import java.time.LocalDate
+import java.time.LocalTime
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -106,5 +115,45 @@ class ScreenshotTest {
     @Test
     fun calendarDark() = capture("calendar-dark", dark = true) {
         CalendarScreen(SAMPLE_CALENDAR, NO_CALENDAR_ACTIONS)
+    }
+
+    private val formReference = MeetingFormReference(
+        myPersonId = "p1",
+        people = listOf(PersonOption("p1", "Pat Example"), PersonOption("p2", "Sam Other"), PersonOption("p3", "Robin Guest")),
+        rooms = listOf(RoomOption("r1", "Atrium", 4), RoomOption("r2", "Boardroom", 8)),
+        timeFormat = TimeFormat.TwentyFourHour,
+        dateFormat = DateFormat.Iso,
+    )
+
+    private val filledForm = AddMeetingState(
+        reference = formReference,
+        loading = false,
+        subject = "Design review",
+        organiserId = "p1",
+        attendeeIds = listOf("p2", "p3"),
+        date = LocalDate.of(2026, 10, 8),
+        start = LocalTime.of(14, 30),
+        end = LocalTime.of(15, 30),
+        roomId = "r2",
+    )
+
+    private val noFormActions = AddMeetingActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+
+    @Test
+    fun addMeeting() = capture("add-meeting") {
+        AddMeetingScreen(filledForm, noFormActions)
+    }
+
+    @Test
+    fun addMeetingDark() = capture("add-meeting-dark", dark = true) {
+        AddMeetingScreen(filledForm, noFormActions)
+    }
+
+    @Test
+    fun addMeetingRejected() = capture("add-meeting-rejected") {
+        AddMeetingScreen(
+            filledForm.copy(roomId = "", errors = listOf("Please select a room.", "The room does not have enough capacity for all attendees.")),
+            noFormActions,
+        )
     }
 }

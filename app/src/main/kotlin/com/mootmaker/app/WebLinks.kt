@@ -12,7 +12,6 @@ import androidx.browser.customtabs.CustomTabsIntent
 class WebLinks(private val siteUrl: String) {
     fun signUp() = "$siteUrl/signup" // M8
     fun forgotPassword() = "$siteUrl/forgot-password" // M8
-    fun addMeeting() = "$siteUrl/meetings/add" // M4
 }
 
 /** Opens a web page in a Custom Tab: an in-app browser tab with its own (separate) web session. */

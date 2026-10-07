@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -132,9 +133,71 @@ class FakeBackend : Interceptor {
         if (chain.request().header("Authorization").isNullOrBlank()) {
             return respond(chain, 401, """{"errors":[{"errorType":"UnauthorizedException","message":"You are not authorized to make this call."}]}""")
         }
+        val variables = request["variables"]?.jsonObject
+        when (operation) {
+            "SuggestRoom" -> return respond(chain, 200, suggestRoomResponse(variables!!))
+            "CreateMeeting" -> return respond(chain, 200, createMeetingResponse(variables!!["meeting"]!!.jsonObject))
+        }
         val dates = (request["variables"]?.jsonObject?.get("dates") as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
         val meetingId = request["variables"]?.jsonObject?.get("id")?.jsonPrimitive?.content
         return respond(chain, 200, homeResponse(dates, meetingId, withMeeting = operation == "MeetingDetails"))
+    }
+
+    /** Rooms that hold [capacity] people and are free for the slot, smallest first then by name, as the API ranks them. */
+    private fun freeRooms(start: String, end: String, capacity: Int) = rooms
+        .filter { it.capacity >= capacity && meetings.none { m -> m.roomId == it.id && m.startTime < end && start < m.endTime } }
+        .sortedWith(compareBy({ it.capacity }, { it.name }))
+
+    private fun suggestRoomResponse(variables: JsonObject): String {
+        val free = freeRooms(
+            variables["startTime"]!!.jsonPrimitive.content,
+            variables["endTime"]!!.jsonPrimitive.content,
+            variables["requiredCapacity"]!!.jsonPrimitive.content.toInt(),
+        )
+        return buildJsonObject {
+            putJsonObject("data") {
+                put(
+                    "suggestRoom",
+                    buildJsonArray {
+                        free.forEach { add(buildJsonObject { put("id", it.id); put("name", it.name); put("capacity", it.capacity) }) }
+                    },
+                )
+            }
+        }.toString()
+    }
+
+    /** Applies the API's main booking rules, reporting every one broken, and books the meeting if none is. */
+    private fun createMeetingResponse(input: JsonObject): String {
+        fun text(name: String) = input[name]?.jsonPrimitive?.content.orEmpty()
+        val attendeeIds = (input["attendeeIds"] as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
+        val start = text("startTime")
+        val end = text("endTime")
+        val room = rooms.firstOrNull { it.id == text("roomId") }
+        val errors = buildList {
+            if (text("subject").isBlank()) add("SubjectRequired")
+            if (text("roomId").isBlank()) add("RoomRequired") else if (room == null) add("RoomNotFound")
+            if (text("organiserId").isBlank()) add("OrganiserRequired")
+            if (text("organiserId").isNotBlank() && text("organiserId") in attendeeIds) add("OrganiserIsAttendee")
+            if (end <= start) add("EndBeforeStart")
+            if (room != null) {
+                if (room.capacity < attendeeIds.size + 1) add("InsufficientCapacity")
+                if (meetings.any { it.roomId == room.id && it.startTime < end && start < it.endTime }) add("TimeRangeUnavailable")
+            }
+        }
+        val created = if (errors.isEmpty()) {
+            FakeMeeting("new-${meetings.size + 1}", text("subject"), start, end, text("roomId"), text("organiserId"), attendeeIds)
+                .also { meetings = meetings + it }
+        } else {
+            null
+        }
+        return buildJsonObject {
+            putJsonObject("data") {
+                putJsonObject("createMeeting") {
+                    if (created == null) put("meeting", JsonNull) else putJsonObject("meeting") { put("id", created.id); put("startTime", created.startTime) }
+                    put("errors", buildJsonArray { errors.forEach { add(JsonPrimitive(it)) } })
+                }
+            }
+        }.toString()
     }
 
     private val people: List<FakePerson>

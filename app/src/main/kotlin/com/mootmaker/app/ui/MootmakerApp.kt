@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,6 +28,9 @@ import com.mootmaker.app.WebLinks
 import com.mootmaker.app.openInCustomTab
 import com.mootmaker.app.shareLink
 import com.mootmaker.app.ui.about.AboutScreen
+import com.mootmaker.app.ui.addmeeting.AddMeetingActions
+import com.mootmaker.app.ui.addmeeting.AddMeetingScreen
+import com.mootmaker.app.ui.addmeeting.AddMeetingViewModel
 import com.mootmaker.app.ui.availability.AvailabilityActions
 import com.mootmaker.app.ui.availability.AvailabilityScreen
 import com.mootmaker.app.ui.availability.AvailabilityViewModel
@@ -54,10 +58,12 @@ private object Routes {
     const val ABOUT = "about"
     const val AVAILABILITY = "availability/{date}"
 
+    const val ADD_MEETING = "meetings/add/{date}"
     const val MEETING = "meeting/{id}"
     const val CALENDAR = "calendar/{personId}"
 
     fun availability(date: LocalDate) = "availability/$date"
+    fun addMeeting(date: LocalDate) = "meetings/add/$date"
     fun meeting(id: String) = "meeting/$id"
     fun calendar(personId: String) = "calendar/$personId"
 }
@@ -127,7 +133,7 @@ fun MootmakerApp(container: AppContainer) {
                 actions = HomeActions(
                     onCalendar = { claims?.personId?.let { navController.navigate(Routes.calendar(it)) } },
                     onRoomAvailabilityToday = { navController.navigate(Routes.availability(state.today)) },
-                    onAddMeeting = { open(links.addMeeting()) },
+                    onAddMeeting = { navController.navigate(Routes.addMeeting(state.today)) },
                     onRetry = viewModel::refresh,
                     onAbout = { navController.navigate(Routes.ABOUT) },
                     onSignOut = { scope.launch { session.signOut() } },
@@ -151,9 +157,37 @@ fun MootmakerApp(container: AppContainer) {
                     onNextDay = viewModel::nextDay,
                     onPickDate = viewModel::goTo,
                     onToggleRoom = viewModel::toggleExpanded,
-                    onAddMeeting = { open(links.addMeeting()) },
+                    onAddMeeting = { navController.navigate(Routes.addMeeting(state.date)) },
                     onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                     onRetry = viewModel::refresh,
+                ),
+            )
+        }
+        composable(Routes.ADD_MEETING, arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
+            val date = entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+            val viewModel = viewModel { AddMeetingViewModel(container.meetingFormSource, date) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(viewModel) { viewModel.load() }
+            AddMeetingScreen(
+                state = state,
+                actions = AddMeetingActions(
+                    onBack = { navController.popBackStack() },
+                    onSubject = viewModel::setSubject,
+                    onOrganiser = viewModel::setOrganiser,
+                    onAttendees = viewModel::setAttendees,
+                    onDate = viewModel::setDate,
+                    onStart = viewModel::setStart,
+                    onEnd = viewModel::setEnd,
+                    onRoom = viewModel::setRoom,
+                    onSuggestRoom = viewModel::suggestRoom,
+                    onSave = viewModel::save,
+                    onDismissErrors = viewModel::dismissErrors,
+                    onRetry = viewModel::load,
+                    onSaved = { meetingId ->
+                        Toast.makeText(context, "Meeting was successfully scheduled.", Toast.LENGTH_SHORT).show()
+                        // The form is replaced by the new meeting, so Back returns to where Add was opened.
+                        navController.navigate(Routes.meeting(meetingId)) { popUpTo(Routes.ADD_MEETING) { inclusive = true } }
+                    },
                 ),
             )
         }

@@ -1,0 +1,41 @@
+# The Add Meeting form's reference data: who the caller is (the organiser defaults to them), everyone
+# who can be picked, and the rooms with their capacity. Colour is selected only so the room list can
+# be named the same way elsewhere; the form itself shows name and capacity.
+query MeetingForm {
+  workspace {
+    me {
+      id
+      timeFormat
+      dateFormat
+    }
+    people {
+      id
+      name
+    }
+    rooms {
+      id
+      name
+      capacity
+    }
+  }
+}
+
+# The ranked rooms free for a slot that hold `requiredCapacity` people (organiser plus attendees).
+query SuggestRoom($startTime: String!, $endTime: String!, $requiredCapacity: Int!) {
+  suggestRoom(startTime: $startTime, endTime: $endTime, requiredCapacity: $requiredCapacity) {
+    id
+    name
+    capacity
+  }
+}
+
+# Rejected bookings come back as a successful response with `errors` set, not as a GraphQL error.
+mutation CreateMeeting($meeting: MeetingInput!) {
+  createMeeting(meeting: $meeting) {
+    meeting {
+      id
+      startTime
+    }
+    errors
+  }
+}

@@ -58,7 +58,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** What the home screen can do. Add meeting still opens the webapp (design choice 10) until M4. */
+/** What the home screen can do. Add meeting opens the native form (M4). */
 data class HomeActions(
     val onCalendar: () -> Unit,
     val onRoomAvailabilityToday: () -> Unit,

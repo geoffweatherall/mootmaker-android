@@ -135,10 +135,10 @@ class Api(private val account: Acceptance.Account) {
         return result["person"]!!.jsonObject.string("id")
     }
 
-    fun createRoom(name: String): String {
+    fun createRoom(name: String, capacity: Int = 6): String {
         val result = query(
             "mutation(\$room: RoomInput!) { createRoom(room: \$room) { room { id } errors } }",
-            buildJsonObject { put("room", buildJsonObject { put("name", name); put("capacity", 6) }) },
+            buildJsonObject { put("room", buildJsonObject { put("name", name); put("capacity", capacity) }) },
         )["createRoom"]!!.jsonObject
         checkNoErrors(result)
         return result["room"]!!.jsonObject.string("id")
