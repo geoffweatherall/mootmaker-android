@@ -18,6 +18,11 @@ env:
       - tapOn: "Version .*"
 - tapOn: "Environment name"
 - inputText: ${ENVIRONMENT}
+# The keyboard covers the button under the field: hide it, and scroll in case it is still below.
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Switch environment"
+    direction: DOWN
 - tapOn: "Switch environment"
 - extendedWaitUntil:
     visible: "Environment: ${ENVIRONMENT}"
@@ -31,8 +36,10 @@ env:
 - tapOn: "Create an account"
 - tapOn: "Name"
 - inputText: ${output.account.name}
+- hideKeyboard
 - tapOn: "Email"
 - inputText: ${output.account.email}
+- hideKeyboard
 - tapOn: "Password"
 - inputText: ${output.account.password}
 - hideKeyboard
@@ -87,6 +94,7 @@ env:
 - tapOn: "Email"
 - eraseText
 - inputText: ${output.account.email}
+- hideKeyboard
 - tapOn: "Password"
 - eraseText
 - inputText: ${output.account.password}
