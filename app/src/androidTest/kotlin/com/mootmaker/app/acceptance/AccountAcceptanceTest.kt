@@ -86,7 +86,7 @@ class AccountAcceptanceTest {
         val run = UUID.randomUUID().toString().take(6)
         val admin = Api(Acceptance.admin)
         val room = "Z-Account $run"
-        admin.createRoom(room)
+        val roomId = admin.createRoom(room)
         val identity = EmailHelper.freshAccount()
         val account = Acceptance.Account(identity.email, identity.password)
 
@@ -136,6 +136,13 @@ class AccountAcceptanceTest {
         assertTrue(subject in admin.subjectsOn(bookedOn.toString()))
         compose.onNodeWithContentDescription("Back").performClick()
 
+        // A meeting tomorrow, for the cancellation check below. The one booked above can't be used for
+        // that: late in the evening the form's default slot (23:30 at the latest) has already started
+        // by the time the account goes, and the API cancels only meetings starting from now onward.
+        val upcoming = "Upcoming $run"
+        val me = Api(account)
+        me.createMeeting(roomId, me.myPersonId(), upcoming, "${LocalDate.now().plusDays(1)}T10:00:00", "${LocalDate.now().plusDays(1)}T11:00:00")
+
         // Delete account: confirm, and the app is signed out.
         compose.waitForText("Add meeting")
         compose.onNodeWithContentDescription("More options").performClick()
@@ -147,8 +154,8 @@ class AccountAcceptanceTest {
         compose.waitForText("Create an account")
         toDelete -= account
 
-        // The meeting it organised is cancelled, and its password no longer signs in.
-        assertFalse(subject in admin.subjectsOn(bookedOn.toString()))
+        // Its upcoming meeting is cancelled, and its password no longer signs in.
+        assertFalse(upcoming in admin.subjectsOn(LocalDate.now().plusDays(1).toString()))
         compose.signIn(account)
         compose.waitForText("Incorrect username or password.")
     }
