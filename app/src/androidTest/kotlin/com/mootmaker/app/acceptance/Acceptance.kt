@@ -1,7 +1,10 @@
 package com.mootmaker.app.acceptance
 
 import android.util.Base64
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -168,6 +171,51 @@ class Api(private val account: Acceptance.Account) {
         return result["meeting"]!!.jsonObject.string("id")
     }
 
+    fun updateMeeting(
+        id: String,
+        roomId: String,
+        organiserId: String,
+        subject: String,
+        start: String,
+        end: String,
+        attendeeIds: List<String> = emptyList(),
+    ) {
+        val meeting = buildJsonObject {
+            put("roomId", roomId)
+            put("organiserId", organiserId)
+            put("attendeeIds", JsonArray(attendeeIds.map { JsonPrimitive(it) }))
+            put("subject", subject)
+            put("startTime", start)
+            put("endTime", end)
+        }
+        val result = query(
+            "mutation(\$id: ID!, \$meeting: MeetingInput!) { updateMeeting(id: \$id, meeting: \$meeting) { meeting { id } errors } }",
+            buildJsonObject { put("id", id); put("meeting", meeting) },
+        )["updateMeeting"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
+    fun cancelMeeting(id: String) {
+        val result = query(
+            "mutation(\$id: ID!) { cancelMeeting(id: \$id) { errors } }",
+            buildJsonObject { put("id", id) },
+        )["cancelMeeting"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
+    /** The meeting as the API holds it, or null once it no longer exists. */
+    fun meeting(id: String): JsonObject? = query(
+        "query(\$id: ID!) { meeting(id: \$id) { subject startTime endTime attendees { person { id } status } } }",
+        buildJsonObject { put("id", id) },
+    )["meeting"] as? JsonObject
+
+    fun subjectOf(id: String): String? = meeting(id)?.string("subject")
+
+    /** [personId]'s response to the meeting, as the API holds it. */
+    fun responseOf(id: String, personId: String): String? =
+        meeting(id)?.get("attendees")?.jsonArray?.map { it.jsonObject }
+            ?.firstOrNull { it["person"]!!.jsonObject.string("id") == personId }?.string("status")
+
     private fun checkNoErrors(result: JsonObject) {
         val errors = result["errors"]!!.jsonArray
         check(errors.isEmpty()) { "Mutation rejected: $errors" }
@@ -183,6 +231,15 @@ fun ComposeTestRule.shown(text: String) = onAllNodes(hasText(text)).fetchSemanti
 fun ComposeTestRule.onAllNodesWithTextFirst(text: String): SemanticsNodeInteraction = onAllNodes(hasText(text)).onFirst()
 
 fun ComposeTestRule.waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
+
+/**
+ * Scrolls the home screen's list until a node matching [matcher] is composed. Home is a lazy list:
+ * rows below the fold (after every invitation in "Needs your response") are not composed at all.
+ */
+fun ComposeTestRule.scrollHomeTo(matcher: SemanticsMatcher) {
+    waitForText("Needs your response")
+    onNode(hasScrollAction()).performScrollToNode(matcher)
+}
 
 fun ComposeTestRule.field(label: String): SemanticsNodeInteraction = onNode(hasText(label) and hasSetTextAction())
 

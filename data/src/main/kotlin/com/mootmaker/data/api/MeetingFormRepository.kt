@@ -1,15 +1,19 @@
 package com.mootmaker.data.api
 
 import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.Optional
 import com.mootmaker.data.agenda.DateFormat
 import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.graphql.CreateMeetingMutation
+import com.mootmaker.data.graphql.EditMeetingQuery
 import com.mootmaker.data.graphql.MeetingFormQuery
 import com.mootmaker.data.graphql.SuggestRoomQuery
+import com.mootmaker.data.graphql.UpdateMeetingMutation
 import com.mootmaker.data.graphql.type.DateFormat as ApiDateFormat
 import com.mootmaker.data.graphql.type.MeetingInput
 import com.mootmaker.data.graphql.type.TimeFormat as ApiTimeFormat
 import com.mootmaker.data.meeting.CreateResult
+import com.mootmaker.data.meeting.ExistingMeeting
 import com.mootmaker.data.meeting.MeetingDraft
 import com.mootmaker.data.meeting.MeetingFormReference
 import com.mootmaker.data.meeting.PersonOption
@@ -20,9 +24,15 @@ interface MeetingFormSource {
     suspend fun loadReference(): MeetingFormReference
 
     /** Rooms free for the slot that hold [requiredCapacity] people, best fit first. */
-    suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int): List<RoomOption>
+    suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int, excludingMeetingId: String? = null): List<RoomOption>
 
     suspend fun create(draft: MeetingDraft): CreateResult
+
+    /** The meeting to edit, or null when it no longer exists. */
+    suspend fun loadMeeting(meetingId: String): ExistingMeeting?
+
+    /** Saves an edit. The draft's `expectedVersion` makes a stale edit come back as `MeetingChanged`. */
+    suspend fun update(meetingId: String, draft: MeetingDraft): CreateResult
 }
 
 /** Reads the form's reference data and books the meeting. Authoritative validation stays on the server. */
@@ -46,20 +56,15 @@ class MeetingFormRepository(
         )
     }
 
-    override suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int): List<RoomOption> =
-        apollo().call(SuggestRoomQuery(startTime, endTime, requiredCapacity), idToken(), "Something went wrong suggesting a room.")
-            .suggestRoom.map { RoomOption(it.id, it.name, it.capacity) }
+    override suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int, excludingMeetingId: String?): List<RoomOption> =
+        apollo().call(
+            SuggestRoomQuery(startTime, endTime, requiredCapacity, Optional.presentIfNotNull(excludingMeetingId)),
+            idToken(),
+            "Something went wrong suggesting a room.",
+        ).suggestRoom.map { RoomOption(it.id, it.name, it.capacity) }
 
     override suspend fun create(draft: MeetingDraft): CreateResult {
-        val input = MeetingInput(
-            roomId = draft.roomId,
-            organiserId = draft.organiserId,
-            attendeeIds = draft.attendeeIds,
-            subject = draft.subject,
-            startTime = draft.startTime,
-            endTime = draft.endTime,
-        )
-        val result = apollo().send(CreateMeetingMutation(input), idToken(), "Something went wrong saving the meeting.").createMeeting
+        val result = apollo().send(CreateMeetingMutation(draft.toInput()), idToken(), "Something went wrong saving the meeting.").createMeeting
         val meetingId = result.meeting?.id
         return when {
             result.errors.isNotEmpty() -> CreateResult.Rejected(result.errors.map { meetingErrorMessage(it.rawValue) })
@@ -67,4 +72,38 @@ class MeetingFormRepository(
             else -> throw ApiException("Something went wrong saving the meeting.")
         }
     }
+
+    override suspend fun loadMeeting(meetingId: String): ExistingMeeting? =
+        apollo().call(EditMeetingQuery(meetingId), idToken(), "Something went wrong loading the meeting.").meeting?.let {
+            ExistingMeeting(
+                id = it.id,
+                subject = it.subject,
+                startTime = it.startTime,
+                endTime = it.endTime,
+                roomId = it.room.id,
+                organiserId = it.organiser.id,
+                attendeeIds = it.attendees.map { attendee -> attendee.person.id },
+                version = it.version,
+            )
+        }
+
+    override suspend fun update(meetingId: String, draft: MeetingDraft): CreateResult {
+        val result = apollo().send(UpdateMeetingMutation(meetingId, draft.toInput()), idToken(), "Something went wrong saving the meeting.").updateMeeting
+        val updatedId = result.meeting?.id
+        return when {
+            result.errors.isNotEmpty() -> CreateResult.Rejected(result.errors.map { meetingErrorMessage(it.rawValue) })
+            updatedId != null -> CreateResult.Created(updatedId)
+            else -> throw ApiException("Something went wrong saving the meeting.")
+        }
+    }
+
+    private fun MeetingDraft.toInput() = MeetingInput(
+        roomId = roomId,
+        organiserId = organiserId,
+        attendeeIds = attendeeIds,
+        subject = subject,
+        startTime = startTime,
+        endTime = endTime,
+        expectedVersion = Optional.presentIfNotNull(expectedVersion),
+    )
 }

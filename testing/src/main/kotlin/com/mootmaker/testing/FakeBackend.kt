@@ -35,6 +35,8 @@ data class FakeMeeting(
     val attendeeIds: List<String> = emptyList(),
     /** Response by attendee id; an attendee not listed here has not responded. */
     val responses: Map<String, String> = emptyMap(),
+    /** Changes whenever an edit changes the meeting, as the API's `version` does; a response leaves it alone. */
+    val version: Int = 1,
 )
 
 /**
@@ -56,6 +58,9 @@ class FakeBackend : Interceptor {
 
     var personId: String? = "person-1"
     var personName = "Pat Example"
+
+    /** Whether the signed-in user's ID token says `custom:class` is admin. */
+    var isAdmin = false
     var timeFormat = "TwentyFourHour"
     var dateFormat = "Iso"
 
@@ -120,7 +125,7 @@ class FakeBackend : Interceptor {
 
     private fun authResult(includeRefresh: Boolean): String = buildJsonObject {
         putJsonObject("AuthenticationResult") {
-            put("IdToken", fakeIdToken(email = demoEmail ?: "pat@example.com", name = personName, personId = personId))
+            put("IdToken", fakeIdToken(email = demoEmail ?: "pat@example.com", name = personName, personId = personId, admin = isAdmin))
             put("AccessToken", "fake-access-token")
             if (includeRefresh) put("RefreshToken", "fake-refresh-token")
         }
@@ -137,15 +142,18 @@ class FakeBackend : Interceptor {
         when (operation) {
             "SuggestRoom" -> return respond(chain, 200, suggestRoomResponse(variables!!))
             "CreateMeeting" -> return respond(chain, 200, createMeetingResponse(variables!!["meeting"]!!.jsonObject))
+            "UpdateMeeting" -> return respond(chain, 200, updateMeetingResponse(variables!!["id"]!!.jsonPrimitive.content, variables["meeting"]!!.jsonObject))
+            "CancelMeeting" -> return respond(chain, 200, cancelMeetingResponse(variables!!["id"]!!.jsonPrimitive.content))
+            "RespondToMeeting" -> return respond(chain, 200, respondResponse(variables!!["meetingId"]!!.jsonPrimitive.content, variables["status"]!!.jsonPrimitive.content))
         }
         val dates = (request["variables"]?.jsonObject?.get("dates") as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
         val meetingId = request["variables"]?.jsonObject?.get("id")?.jsonPrimitive?.content
-        return respond(chain, 200, homeResponse(dates, meetingId, withMeeting = operation == "MeetingDetails"))
+        return respond(chain, 200, homeResponse(dates, meetingId, withMeeting = operation == "MeetingDetails" || operation == "EditMeeting"))
     }
 
     /** Rooms that hold [capacity] people and are free for the slot, smallest first then by name, as the API ranks them. */
-    private fun freeRooms(start: String, end: String, capacity: Int) = rooms
-        .filter { it.capacity >= capacity && meetings.none { m -> m.roomId == it.id && m.startTime < end && start < m.endTime } }
+    private fun freeRooms(start: String, end: String, capacity: Int, excludingId: String? = null) = rooms
+        .filter { it.capacity >= capacity && meetings.none { m -> m.id != excludingId && m.roomId == it.id && m.startTime < end && start < m.endTime } }
         .sortedWith(compareBy({ it.capacity }, { it.name }))
 
     private fun suggestRoomResponse(variables: JsonObject): String {
@@ -153,6 +161,7 @@ class FakeBackend : Interceptor {
             variables["startTime"]!!.jsonPrimitive.content,
             variables["endTime"]!!.jsonPrimitive.content,
             variables["requiredCapacity"]!!.jsonPrimitive.content.toInt(),
+            (variables["excludingMeetingId"] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content,
         )
         return buildJsonObject {
             putJsonObject("data") {
@@ -166,14 +175,14 @@ class FakeBackend : Interceptor {
         }.toString()
     }
 
-    /** Applies the API's main booking rules, reporting every one broken, and books the meeting if none is. */
-    private fun createMeetingResponse(input: JsonObject): String {
+    /** Every booking rule the input breaks. [excludingId] is the meeting being edited, whose own slot doesn't clash. */
+    private fun bookingErrors(input: JsonObject, excludingId: String? = null): List<String> {
         fun text(name: String) = input[name]?.jsonPrimitive?.content.orEmpty()
         val attendeeIds = (input["attendeeIds"] as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
         val start = text("startTime")
         val end = text("endTime")
         val room = rooms.firstOrNull { it.id == text("roomId") }
-        val errors = buildList {
+        return buildList {
             if (text("subject").isBlank()) add("SubjectRequired")
             if (text("roomId").isBlank()) add("RoomRequired") else if (room == null) add("RoomNotFound")
             if (text("organiserId").isBlank()) add("OrganiserRequired")
@@ -181,20 +190,90 @@ class FakeBackend : Interceptor {
             if (end <= start) add("EndBeforeStart")
             if (room != null) {
                 if (room.capacity < attendeeIds.size + 1) add("InsufficientCapacity")
-                if (meetings.any { it.roomId == room.id && it.startTime < end && start < it.endTime }) add("TimeRangeUnavailable")
+                if (meetings.any { it.id != excludingId && it.roomId == room.id && it.startTime < end && start < it.endTime }) add("TimeRangeUnavailable")
             }
         }
+    }
+
+    private fun mutationResult(field: String, meeting: FakeMeeting?, errors: List<String>): String = buildJsonObject {
+        putJsonObject("data") {
+            putJsonObject(field) {
+                if (meeting == null) put("meeting", JsonNull) else putJsonObject("meeting") { put("id", meeting.id); put("startTime", meeting.startTime) }
+                put("errors", buildJsonArray { errors.forEach { add(JsonPrimitive(it)) } })
+            }
+        }
+    }.toString()
+
+    /** Applies the API's main booking rules, reporting every one broken, and books the meeting if none is. */
+    private fun createMeetingResponse(input: JsonObject): String {
+        fun text(name: String) = input[name]?.jsonPrimitive?.content.orEmpty()
+        val attendeeIds = (input["attendeeIds"] as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
+        val errors = bookingErrors(input)
         val created = if (errors.isEmpty()) {
-            FakeMeeting("new-${meetings.size + 1}", text("subject"), start, end, text("roomId"), text("organiserId"), attendeeIds)
+            FakeMeeting("new-${meetings.size + 1}", text("subject"), text("startTime"), text("endTime"), text("roomId"), text("organiserId"), attendeeIds)
                 .also { meetings = meetings + it }
         } else {
             null
         }
+        return mutationResult("createMeeting", created, errors)
+    }
+
+    /**
+     * Edits a meeting as the API does: a stale `expectedVersion` is
+     * refused with MeetingChanged, and the version moves on once anything changes. Attendees keep their responses.
+     */
+    private fun updateMeetingResponse(id: String, input: JsonObject): String {
+        fun text(name: String) = input[name]?.jsonPrimitive?.content.orEmpty()
+        val existing = meetings.firstOrNull { it.id == id } ?: return mutationResult("updateMeeting", null, listOf("MeetingNotFound"))
+        val expected = (input["expectedVersion"] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content
+        if (expected != null && expected != existing.version.toString()) return mutationResult("updateMeeting", null, listOf("MeetingChanged"))
+        val errors = bookingErrors(input, excludingId = id)
+        if (errors.isNotEmpty()) return mutationResult("updateMeeting", null, errors)
+        val attendeeIds = (input["attendeeIds"] as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
+        val updated = existing.copy(
+            subject = text("subject"),
+            startTime = text("startTime"),
+            endTime = text("endTime"),
+            roomId = text("roomId"),
+            organiserId = text("organiserId"),
+            attendeeIds = attendeeIds,
+            responses = existing.responses.filterKeys { it in attendeeIds },
+            version = existing.version + 1,
+        )
+        meetings = meetings.map { if (it.id == id) updated else it }
+        return mutationResult("updateMeeting", updated, emptyList())
+    }
+
+    private fun cancelMeetingResponse(id: String): String {
+        val found = meetings.any { it.id == id }
+        if (found) meetings = meetings.filter { it.id != id }
         return buildJsonObject {
             putJsonObject("data") {
-                putJsonObject("createMeeting") {
-                    if (created == null) put("meeting", JsonNull) else putJsonObject("meeting") { put("id", created.id); put("startTime", created.startTime) }
-                    put("errors", buildJsonArray { errors.forEach { add(JsonPrimitive(it)) } })
+                putJsonObject("cancelMeeting") {
+                    put("errors", buildJsonArray { if (!found) add(JsonPrimitive("MeetingNotFound")) })
+                }
+            }
+        }.toString()
+    }
+
+    /** The caller's own answer; the organiser and anyone not invited have none to give. */
+    private fun respondResponse(meetingId: String, status: String): String {
+        val meeting = meetings.firstOrNull { it.id == meetingId }
+        val me = personId
+        val error = when {
+            me == null -> "NoLinkedPerson"
+            meeting == null -> "MeetingNotFound"
+            me !in meeting.attendeeIds -> "NotAnAttendee"
+            else -> null
+        }
+        if (error == null && meeting != null && me != null) {
+            meetings = meetings.map { if (it.id == meetingId) it.copy(responses = it.responses + (me to status)) else it }
+        }
+        return buildJsonObject {
+            putJsonObject("data") {
+                putJsonObject("respondToMeeting") {
+                    if (error != null) put("meeting", JsonNull) else putJsonObject("meeting") { put("id", meetingId) }
+                    put("errors", buildJsonArray { error?.let { add(JsonPrimitive(it)) } })
                 }
             }
         }.toString()
@@ -264,6 +343,7 @@ class FakeBackend : Interceptor {
         put("subject", subject)
         put("startTime", startTime)
         put("endTime", endTime)
+        put("version", version.toString())
         putJsonObject("room") {
             put("id", roomId)
             put("name", rooms.firstOrNull { it.id == roomId }?.name ?: "Unknown room")

@@ -24,11 +24,13 @@ query Home($dates: [String!]) {
         }
         organiser {
           id
+          name
         }
         attendees {
           person {
             id
           }
+          status
         }
       }
     }

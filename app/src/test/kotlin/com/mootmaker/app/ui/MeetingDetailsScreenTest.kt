@@ -1,8 +1,10 @@
 package com.mootmaker.app.ui
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.mootmaker.app.ui.meeting.MeetingDetailsActions
@@ -32,6 +34,7 @@ val SAMPLE_MEETING = MeetingDetail(
     subject = "Design review",
     startTime = "2026-10-07T14:30:00",
     endTime = "2026-10-07T15:30:00",
+    roomId = "room-2",
     roomName = "Atrium",
     roomColorSlot = 5,
     organiser = PersonRef("p2", "Sam Other"),
@@ -72,7 +75,8 @@ class MeetingDetailsScreenTest {
         // The caller's own row says "You"; everyone else shows their response.
         compose.onNodeWithText("You").assertIsDisplayed()
         compose.onNodeWithText("No response").assertIsDisplayed()
-        compose.onNodeWithText("Not going").assertIsDisplayed()
+        // Alex's response, and the same words on your own control underneath.
+        compose.onAllNodesWithText("Not going").assertCountEquals(2)
     }
 
     // Use case H.68: the organiser has no response status, and is marked "You" when it is the caller.

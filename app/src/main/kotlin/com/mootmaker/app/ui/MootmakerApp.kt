@@ -60,11 +60,13 @@ private object Routes {
 
     const val ADD_MEETING = "meetings/add/{date}"
     const val MEETING = "meeting/{id}"
+    const val EDIT_MEETING = "meeting/{id}/edit"
     const val CALENDAR = "calendar/{personId}"
 
     fun availability(date: LocalDate) = "availability/$date"
     fun addMeeting(date: LocalDate) = "meetings/add/$date"
     fun meeting(id: String) = "meeting/$id"
+    fun editMeeting(id: String) = "meeting/$id/edit"
     fun calendar(personId: String) = "calendar/$personId"
 }
 
@@ -120,7 +122,7 @@ fun MootmakerApp(container: AppContainer) {
             )
         }
         composable(Routes.HOME) {
-            val viewModel = viewModel { HomeViewModel(container.homeSource) }
+            val viewModel = viewModel { HomeViewModel(container.homeSource, container.meetingSource) }
             val state by viewModel.state.collectAsStateWithLifecycle()
             val claims = (sessionState as? SessionState.SignedIn)?.claims
             LifecycleResumeEffect(viewModel) {
@@ -138,6 +140,8 @@ fun MootmakerApp(container: AppContainer) {
                     onAbout = { navController.navigate(Routes.ABOUT) },
                     onSignOut = { scope.launch { session.signOut() } },
                     onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
+                    onRespond = viewModel::respond,
+                    onSearchFurtherAhead = viewModel::searchFurtherAhead,
                 ),
             )
         }
@@ -191,9 +195,37 @@ fun MootmakerApp(container: AppContainer) {
                 ),
             )
         }
+        composable(Routes.EDIT_MEETING, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+            val meetingId = entry.arguments?.getString("id").orEmpty()
+            val viewModel = viewModel { AddMeetingViewModel(container.meetingFormSource, LocalDate.now(), editingMeetingId = meetingId) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(viewModel) { viewModel.load() }
+            AddMeetingScreen(
+                state = state,
+                actions = AddMeetingActions(
+                    onBack = { navController.popBackStack() },
+                    onSubject = viewModel::setSubject,
+                    onOrganiser = viewModel::setOrganiser,
+                    onAttendees = viewModel::setAttendees,
+                    onDate = viewModel::setDate,
+                    onStart = viewModel::setStart,
+                    onEnd = viewModel::setEnd,
+                    onRoom = viewModel::setRoom,
+                    onSuggestRoom = viewModel::suggestRoom,
+                    onSave = viewModel::save,
+                    onDismissErrors = viewModel::dismissErrors,
+                    onRetry = viewModel::load,
+                    onSaved = {
+                        Toast.makeText(context, "Meeting was successfully updated.", Toast.LENGTH_SHORT).show()
+                        // Back to the meeting, which reloads when it becomes visible.
+                        navController.popBackStack()
+                    },
+                ),
+            )
+        }
         composable(Routes.MEETING, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             val meetingId = entry.arguments?.getString("id").orEmpty()
-            val viewModel = viewModel { MeetingDetailsViewModel(container.meetingSource, meetingId) }
+            val viewModel = viewModel { MeetingDetailsViewModel(container.meetingSource, meetingId, isAdmin = (sessionState as? SessionState.SignedIn)?.claims?.isAdmin == true) }
             val state by viewModel.state.collectAsStateWithLifecycle()
             LifecycleResumeEffect(viewModel) {
                 viewModel.refresh()
@@ -206,7 +238,17 @@ fun MootmakerApp(container: AppContainer) {
                     onShare = { shareLink(context, it.subject, meetingShareUrl(configState.environment.siteUrl, it.id)) },
                     onOpenCalendar = { navController.navigate(Routes.calendar(it)) },
                     onRetry = viewModel::refresh,
+                    onEdit = { navController.navigate(Routes.editMeeting(it)) },
+                    onRespond = viewModel::respond,
+                    onAskToCancel = viewModel::askToCancel,
+                    onKeepMeeting = viewModel::keepMeeting,
+                    onConfirmCancel = viewModel::confirmCancel,
+                    onCancelled = {
+                        Toast.makeText(context, "Meeting was cancelled.", Toast.LENGTH_SHORT).show()
+                        navController.popBackStack()
+                    },
                 ),
+                canEdit = viewModel.canEdit(),
             )
         }
         composable(Routes.CALENDAR, arguments = listOf(navArgument("personId") { type = NavType.StringType })) { entry ->

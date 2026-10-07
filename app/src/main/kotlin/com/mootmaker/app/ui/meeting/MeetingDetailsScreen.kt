@@ -17,7 +17,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,8 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
@@ -37,21 +42,31 @@ import androidx.compose.ui.unit.dp
 import com.mootmaker.app.ui.theme.roomColor
 import com.mootmaker.data.agenda.formatDate
 import com.mootmaker.data.agenda.formatTime
+import com.mootmaker.data.meeting.AttendeeStatus
 import com.mootmaker.data.meeting.MeetingDetail
 import com.mootmaker.data.meeting.MeetingDetailsData
 import com.mootmaker.data.meeting.PersonRef
+import com.mootmaker.data.meeting.myAttendeeRow
 
 data class MeetingDetailsActions(
     val onBack: () -> Unit,
     val onShare: (MeetingDetail) -> Unit,
     val onOpenCalendar: (personId: String) -> Unit,
     val onRetry: () -> Unit,
+    val onEdit: (meetingId: String) -> Unit = {},
+    val onRespond: (AttendeeStatus) -> Unit = {},
+    val onAskToCancel: () -> Unit = {},
+    val onKeepMeeting: () -> Unit = {},
+    val onConfirmCancel: () -> Unit = {},
+    /** The meeting was deleted; leave the screen. */
+    val onCancelled: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActions) {
+fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActions, canEdit: Boolean = false) {
     val meeting = state.data?.meeting
+    LaunchedEffect(state.cancelled) { if (state.cancelled) actions.onCancelled() }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -65,6 +80,15 @@ fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActi
                     if (meeting != null) {
                         IconButton(onClick = { actions.onShare(meeting) }) {
                             Icon(Icons.Filled.Share, contentDescription = "Share meeting")
+                        }
+                        // Hidden outright for anyone who may not use them; the API refuses them anyway.
+                        if (canEdit) {
+                            IconButton(onClick = { actions.onEdit(meeting.id) }) {
+                                Icon(Icons.Filled.Edit, contentDescription = "Edit meeting")
+                            }
+                            IconButton(onClick = actions.onAskToCancel) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Cancel meeting")
+                            }
                         }
                     }
                 },
@@ -82,20 +106,44 @@ fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActi
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
                 )
-                else -> Details(meeting, state.data, state.error, actions)
+                else -> Details(meeting, state.data, state, actions)
             }
         }
     }
+    val meetingToCancel = meeting
+    if (state.confirmingCancel && meetingToCancel != null) CancelDialog(meetingToCancel.subject, state, actions)
+}
+
+/** Names the meeting about to be deleted, so it is clear which one it is (use case O.117). */
+@Composable
+private fun CancelDialog(subject: String, state: MeetingDetailsState, actions: MeetingDetailsActions) {
+    AlertDialog(
+        onDismissRequest = { if (!state.cancelling) actions.onKeepMeeting() },
+        title = { Text("Cancel this meeting?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.actionErrors.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
+                Text("This permanently deletes \"$subject\" for every attendee. This can't be undone.")
+            }
+        },
+        dismissButton = { TextButton(onClick = actions.onKeepMeeting, enabled = !state.cancelling) { Text("Keep meeting") } },
+        confirmButton = {
+            TextButton(onClick = actions.onConfirmCancel, enabled = !state.cancelling) {
+                Text("Cancel meeting", color = MaterialTheme.colorScheme.error)
+            }
+        },
+    )
 }
 
 @Composable
-private fun Details(meeting: MeetingDetail, data: MeetingDetailsData, error: String?, actions: MeetingDetailsActions) {
+private fun Details(meeting: MeetingDetail, data: MeetingDetailsData, state: MeetingDetailsState, actions: MeetingDetailsActions) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (!state.confirmingCancel) state.actionErrors.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
         Text(meeting.subject, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).background(roomColor(meeting.roomColorSlot, dark), CircleShape))
@@ -118,6 +166,11 @@ private fun Details(meeting: MeetingDetail, data: MeetingDetailsData, error: Str
         }
         meeting.attendees.forEach { attendee ->
             PersonRow(attendee.person, data.myPersonId, status = attendee.status.label, onClick = { actions.onOpenCalendar(attendee.person.id) })
+        }
+        // Only an attendee has anything to answer: the organiser is implicitly going.
+        myAttendeeRow(meeting, data.myPersonId)?.let { mine ->
+            Caption("Your response")
+            ResponseButtons(selected = mine.status, enabled = !state.responding, onRespond = actions.onRespond)
         }
     }
 }

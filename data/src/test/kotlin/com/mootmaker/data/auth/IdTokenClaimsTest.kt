@@ -20,4 +20,10 @@ class IdTokenClaimsTest {
     fun anAccountWithNoLinkedPersonHasNoPersonId() {
         assertNull(IdTokenClaims.parse(fakeIdToken(personId = null)).personId)
     }
+
+    @Test
+    fun onlyTheAdminClassIsAnAdmin() {
+        assertEquals(false, IdTokenClaims.parse(fakeIdToken()).isAdmin)
+        assertEquals(true, IdTokenClaims.parse(fakeIdToken(admin = true)).isAdmin)
+    }
 }

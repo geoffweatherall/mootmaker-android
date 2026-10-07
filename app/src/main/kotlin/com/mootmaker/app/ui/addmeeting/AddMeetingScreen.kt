@@ -87,7 +87,7 @@ fun AddMeetingScreen(state: AddMeetingState, actions: AddMeetingActions) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add meeting") },
+                title = { Text(if (state.editing) "Edit meeting" else "Add meeting") },
                 navigationIcon = {
                     IconButton(onClick = actions.onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

@@ -1,5 +1,6 @@
 package com.mootmaker.app.acceptance
 
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -20,7 +21,7 @@ import java.util.UUID
  *
  * H.73 (a meeting that doesn't exist) is Robolectric-only: nothing in the app lets a person type
  * an id, and a meeting cancelled between a list and a tap is not something this suite can stage.
- * H.72 is webapp-specific. H.108's response control is M5.
+ * H.72 is webapp-specific. H.108's response control is covered in MeetingChangeAcceptanceTest.
  */
 class MeetingAcceptanceTest {
     @get:Rule
@@ -47,7 +48,7 @@ class MeetingAcceptanceTest {
 
         scenario = Acceptance.launchApp()
         compose.signIn(Acceptance.admin)
-        compose.waitForText("Mine $run")
+        compose.scrollHomeTo(hasText("Mine $run"))
         compose.onNodeWithText("Mine $run").performClick()
 
         compose.waitForText("Attendees · 1")
@@ -76,14 +77,16 @@ class MeetingAcceptanceTest {
 
         scenario = Acceptance.launchApp()
         compose.signIn(Acceptance.standard)
-        compose.waitForText("Invited $run")
-        compose.onNodeWithText("Invited $run").performClick()
+        // Unanswered, so it is on home twice: as a card in "Needs your response" and as an agenda row.
+        compose.scrollHomeTo(hasText("Invited $run"))
+        compose.onAllNodesWithTextFirst("Invited $run").performClick()
 
         compose.waitForText("Attendees · 1")
         assertTrue(compose.shown(admin.myName()))
         assertTrue(compose.shown("You"))
-        // Their own row shows "You", not a status; the status control is M5.
+        // Their own row shows "You", not a status, with the control to answer underneath.
         assertFalse(compose.shown("No response"))
+        assertTrue(compose.shown("Your response"))
     }
 
     /** E.32 (navigation to details) and H.70: a meeting between other people, reached from a room card. */

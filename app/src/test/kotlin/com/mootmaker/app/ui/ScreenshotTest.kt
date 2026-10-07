@@ -69,22 +69,22 @@ class ScreenshotTest {
 
     @Test
     fun homeWithMeetings() = capture("home") {
-        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA), loading = false), null, NO_ACTIONS)
+        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
     }
 
     @Test
     fun homeWithMeetingsDark() = capture("home-dark", dark = true) {
-        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA), loading = false), null, NO_ACTIONS)
+        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
     }
 
     @Test
     fun homeEmpty() = capture("home-empty") {
-        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, EMPTY_AGENDA), loading = false), null, NO_ACTIONS)
+        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, EMPTY_AGENDA, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
     }
 
     @Test
     fun homeNoLinkedPerson() = capture("home-no-person") {
-        HomeScreen(HomeState(TODAY, HomeData(null, TimeFormat.TwentyFourHour, null), loading = false), null, NO_ACTIONS)
+        HomeScreen(HomeState(TODAY, HomeData(null, TimeFormat.TwentyFourHour, null, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
     }
 
     @Test

@@ -47,7 +47,7 @@ class HomeAcceptanceTest {
 
         scenario = Acceptance.launchApp()
         compose.signIn(Acceptance.admin)
-        compose.waitForText("Earlier today $run")
+        compose.scrollHomeTo(hasText("Earlier today $run"))
 
         listOf("Calendar", "Rooms today", "Add meeting").forEach { compose.onNodeWithText(it).assertExists() }
         val order = listOf("Today", "Earlier today $run", "Later today $run", "Tomorrow", "Tomorrow $run").map { top(it) }
