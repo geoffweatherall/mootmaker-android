@@ -61,6 +61,7 @@ dependencies {
     testImplementation(libs.roborazzi.junit)
 
     androidTestImplementation(project(":testing"))
+    androidTestImplementation(libs.kotlinx.serialization.json)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(platform(libs.compose.bom))

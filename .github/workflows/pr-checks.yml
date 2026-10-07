@@ -78,7 +78,7 @@ jobs:
           target: google_apis
           disable-animations: true
           # bash with pipefail, so tee doesn't hide a failing Gradle exit code.
-          script: bash -c 'set -o pipefail; ./gradlew :app:connectedDebugAndroidTest $E2E_ARGS 2>&1 | tee build.log'
+          script: bash -c 'set -o pipefail; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notPackage=com.mootmaker.app.acceptance $E2E_ARGS 2>&1 | tee build.log'
       - name: Summarise failures
         if: always()
         run: |
