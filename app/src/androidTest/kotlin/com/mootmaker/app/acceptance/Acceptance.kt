@@ -203,6 +203,15 @@ class Api(private val account: Acceptance.Account) {
         checkNoErrors(result)
     }
 
+    /** The caller's own response to a meeting they attend. */
+    fun respond(id: String, status: String) {
+        val result = query(
+            "mutation(\$id: ID!, \$status: AttendeeStatus!) { respondToMeeting(meetingId: \$id, status: \$status) { errors } }",
+            buildJsonObject { put("id", id); put("status", status) },
+        )["respondToMeeting"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
     /** The meeting as the API holds it, or null once it no longer exists. */
     fun meeting(id: String): JsonObject? = query(
         "query(\$id: ID!) { meeting(id: \$id) { subject startTime endTime attendees { person { id } status } } }",

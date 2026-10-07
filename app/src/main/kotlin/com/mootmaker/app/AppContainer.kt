@@ -22,9 +22,15 @@ import com.mootmaker.data.auth.Session
 import com.mootmaker.data.auth.TokenCipher
 import com.mootmaker.data.auth.TokenStore
 import com.mootmaker.data.config.ConfigRepository
+import com.mootmaker.data.live.AppSyncRealtime
+import com.mootmaker.data.live.LiveEvent
+import com.mootmaker.data.live.LiveUpdates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -41,6 +47,7 @@ class AppContainer(
     private val http: OkHttpClient = defaultHttpClient(),
     cipher: TokenCipher = AndroidKeystoreCipher(),
     store: KeyValueStore = DataStoreKeyValueStore(context),
+    live: LiveUpdates? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -70,6 +77,30 @@ class AppContainer(
     val meetingFormSource: MeetingFormSource = MeetingFormRepository(apollo = ::apolloClient, idToken = session::idToken)
 
     val calendarSource: CalendarSource = CalendarRepository(apollo = ::apolloClient, idToken = session::idToken)
+
+    private val liveUpdates: LiveUpdates = live ?: AppSyncRealtime(
+        http = http,
+        httpEndpoint = { session.config.filterIsInstance<ConfigState.Ready>().first().config.graphqlApiUrl },
+        idToken = session::idToken,
+    )
+
+    private val _liveEvents = MutableSharedFlow<LiveEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * What the open screens listen to: someone else changed something, or the channel has just
+     * (re)connected, and in both cases what a screen holds may be stale. No replay, because a screen
+     * that starts listening has just loaded.
+     */
+    val liveEvents: SharedFlow<LiveEvent> = _liveEvents
+
+    /**
+     * Holds the realtime subscription open until cancelled. The UI runs it only while the app is in
+     * the foreground, and the socket goes with it: Android freezes background sockets, so
+     * correctness never rests on one surviving.
+     */
+    suspend fun followLiveUpdates() {
+        liveUpdates.events().collect { _liveEvents.emit(it) }
+    }
 
     private var started = false
 

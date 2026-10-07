@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.mootmaker.data.InMemoryKeyValueStore
+import com.mootmaker.data.live.NoLiveUpdates
 import com.mootmaker.testing.FakeBackend
 import org.junit.After
 import org.junit.Rule
@@ -40,7 +41,7 @@ class AppFlowInstrumentedTest {
             meetings = listOf(FakeBackend.meeting("m1", "Stand-up", LocalDate.now(), 9))
         }
         val application = ApplicationProvider.getApplicationContext<MootmakerApplication>()
-        application.replaceContainer(AppContainer(application, backend.httpClient, store = InMemoryKeyValueStore()))
+        application.replaceContainer(AppContainer(application, backend.httpClient, store = InMemoryKeyValueStore(), live = NoLiveUpdates))
         scenario = ActivityScenario.launch(MainActivity::class.java)
 
         waitForText("demo@mootmaker.com")
