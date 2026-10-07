@@ -68,8 +68,8 @@ class AvailabilityAcceptanceTest {
         compose.waitForText("First $run")
         assertTrue(compose.shown("Second $run"))
         assertFalse(compose.shown("Other room $run"))
-        val first = compose.onNode(hasText("First $run")).fetchSemanticsNode().boundsInRoot.top
-        val second = compose.onNode(hasText("Second $run")).fetchSemanticsNode().boundsInRoot.top
+        val first = compose.onNode(hasText("First $run")).fetchSemanticsNode().positionInRoot.y
+        val second = compose.onNode(hasText("Second $run")).fetchSemanticsNode().positionInRoot.y
         assertTrue("Back-to-back meetings out of order", first < second)
     }
 
