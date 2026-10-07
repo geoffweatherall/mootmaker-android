@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -153,5 +154,38 @@ class AppFlowTest {
 
         compose.waitUntil(5_000) { "config www.test.mootmaker.com" in backend.requests }
         waitForText("Environment: test")
+    }
+
+    // Use cases D.25, E.26, E.27, E.32 and E.33 through the real app wiring: today's rooms from
+    // home, a room's meetings opened, then the next day, with each meeting on its own room only.
+    @Test
+    fun roomsTodayOpensAvailabilityAndTheNextDayCanBeViewed() {
+        val today = LocalDate.now()
+        backend.meetings = listOf(
+            FakeBackend.meeting("a1", "Board sync", today, 9, roomId = "room-1"),
+            FakeBackend.meeting("a2", "Atrium chat", today, 9, roomId = "room-2"),
+            FakeBackend.meeting("a3", "Tomorrow only", today.plusDays(1), 11, roomId = "room-1"),
+        )
+        useFakeBackend(backend)
+        launch()
+        waitForText("demo@mootmaker.com")
+        signInButton().performClick()
+        waitForText("Rooms today")
+
+        compose.onNodeWithText("Rooms today").performClick()
+        waitForText("Atrium")
+        compose.onNodeWithText("Boardroom").assertIsDisplayed()
+        assertTrue("graphql Availability" in backend.requests)
+
+        compose.onAllNodes(hasText("See today's meetings (1)")).onFirst().performClick()
+        // Rooms sort by name, so the first card is the Atrium: its meeting shows, the Boardroom's doesn't.
+        waitForText("Atrium chat")
+        assertTrue(compose.onAllNodes(hasText("Board sync")).fetchSemanticsNodes().isEmpty())
+
+        compose.onNodeWithContentDescription("Next day").performClick()
+        waitForText("Free all day")
+        waitForText("First: Tomorrow only at 11:00")
+        // The new day starts collapsed, and the previous day's meetings are gone.
+        assertTrue(compose.onAllNodes(hasText("Atrium chat")).fetchSemanticsNodes().isEmpty())
     }
 }

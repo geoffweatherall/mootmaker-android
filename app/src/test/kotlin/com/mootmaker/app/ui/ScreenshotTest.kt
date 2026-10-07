@@ -3,6 +3,8 @@ package com.mootmaker.app.ui
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mootmaker.app.ui.availability.AvailabilityState
+import com.mootmaker.app.ui.availability.AvailabilityScreen
 import com.mootmaker.app.ui.home.HomeScreen
 import com.mootmaker.app.ui.home.HomeState
 import com.mootmaker.app.ui.signin.SignInConfig
@@ -72,5 +74,15 @@ class ScreenshotTest {
     @Test
     fun homeNoLinkedPerson() = capture("home-no-person") {
         HomeScreen(HomeState(TODAY, HomeData(null, TimeFormat.TwentyFourHour, null), loading = false), null, NO_ACTIONS)
+    }
+
+    @Test
+    fun availability() = capture("availability") {
+        AvailabilityScreen(SAMPLE_AVAILABILITY, NO_AVAILABILITY_ACTIONS)
+    }
+
+    @Test
+    fun availabilityDark() = capture("availability-dark", dark = true) {
+        AvailabilityScreen(SAMPLE_AVAILABILITY, NO_AVAILABILITY_ACTIONS)
     }
 }

@@ -5,6 +5,8 @@ import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.network.okHttpClient
 import com.mootmaker.data.DataStoreKeyValueStore
 import com.mootmaker.data.KeyValueStore
+import com.mootmaker.data.api.AvailabilityRepository
+import com.mootmaker.data.api.AvailabilitySource
 import com.mootmaker.data.api.HomeRepository
 import com.mootmaker.data.api.HomeSource
 import com.mootmaker.data.auth.AndroidKeystoreCipher
@@ -54,6 +56,8 @@ class AppContainer(
     }
 
     val homeSource: HomeSource = HomeRepository(apollo = ::apolloClient, idToken = session::idToken)
+
+    val availabilitySource: AvailabilitySource = AvailabilityRepository(apollo = ::apolloClient, idToken = session::idToken)
 
     private var started = false
 

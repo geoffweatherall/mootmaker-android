@@ -3,7 +3,6 @@ package com.mootmaker.app
 import android.content.Context
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
-import java.time.LocalDate
 
 /**
  * Pages of the webapp that the app links to for features it doesn't have yet (design choice 10).
@@ -13,7 +12,6 @@ class WebLinks(private val siteUrl: String) {
     fun signUp() = "$siteUrl/signup" // M8
     fun forgotPassword() = "$siteUrl/forgot-password" // M8
     fun addMeeting() = "$siteUrl/meetings/add" // M4
-    fun roomAvailability(date: LocalDate) = "$siteUrl/rooms/$date/availability" // M2
     fun calendar(personId: String) = "$siteUrl/persons/$personId/calendar" // M3
 }
 

@@ -18,12 +18,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.mootmaker.app.AppContainer
 import com.mootmaker.app.BuildConfig
 import com.mootmaker.app.WebLinks
 import com.mootmaker.app.openInCustomTab
 import com.mootmaker.app.ui.about.AboutScreen
+import com.mootmaker.app.ui.availability.AvailabilityActions
+import com.mootmaker.app.ui.availability.AvailabilityScreen
+import com.mootmaker.app.ui.availability.AvailabilityViewModel
 import com.mootmaker.app.ui.home.HomeActions
 import com.mootmaker.app.ui.home.HomeScreen
 import com.mootmaker.app.ui.home.HomeViewModel
@@ -33,11 +38,15 @@ import com.mootmaker.app.ui.signin.SignInViewModel
 import com.mootmaker.data.auth.ConfigState
 import com.mootmaker.data.auth.SessionState
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 private object Routes {
     const val SIGN_IN = "signin"
     const val HOME = "home"
     const val ABOUT = "about"
+    const val AVAILABILITY = "availability/{date}"
+
+    fun availability(date: LocalDate) = "availability/$date"
 }
 
 /**
@@ -104,11 +113,32 @@ fun MootmakerApp(container: AppContainer) {
                 fallbackName = claims?.name ?: claims?.email,
                 actions = HomeActions(
                     onCalendar = { claims?.personId?.let { open(links.calendar(it)) } },
-                    onRoomAvailabilityToday = { open(links.roomAvailability(state.today)) },
+                    onRoomAvailabilityToday = { navController.navigate(Routes.availability(state.today)) },
                     onAddMeeting = { open(links.addMeeting()) },
                     onRetry = viewModel::refresh,
                     onAbout = { navController.navigate(Routes.ABOUT) },
                     onSignOut = { scope.launch { session.signOut() } },
+                ),
+            )
+        }
+        composable(Routes.AVAILABILITY, arguments = listOf(navArgument("date") { type = NavType.StringType })) { entry ->
+            val date = entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+            val viewModel = viewModel { AvailabilityViewModel(container.availabilitySource, date) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(viewModel) {
+                viewModel.refresh()
+                onPauseOrDispose { }
+            }
+            AvailabilityScreen(
+                state = state,
+                actions = AvailabilityActions(
+                    onBack = { navController.popBackStack() },
+                    onPreviousDay = viewModel::previousDay,
+                    onNextDay = viewModel::nextDay,
+                    onPickDate = viewModel::goTo,
+                    onToggleRoom = viewModel::toggleExpanded,
+                    onAddMeeting = { open(links.addMeeting()) },
+                    onRetry = viewModel::refresh,
                 ),
             )
         }
