@@ -2,7 +2,7 @@
 
 A native Android app — a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** M0 (toolchain spike) is done; M1 (sign in and see your day) is in progress; the design is
+**Status:** M0 to M8 are built (M8: sign up, forgot password, delete account); M9 (admin) is next. The design is
 [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
 in the hub repository. Work one milestone at a time, as that document describes.
 
@@ -22,6 +22,10 @@ in the hub repository. Work one milestone at a time, as that document describes.
   `gh api repos/geoffweatherall/mootmaker-android/issues/<n>/labels -f 'labels[]=run-acceptance'`).
   It must be a `pull_request` event: AWS trusts this repository's token only then. It creates and
   tears down its own `and-acc` environment.
+- **Real emailed codes come only through `email-helper/`**, which wraps `mootmaker-email-testing` on the
+  runner (design Decision 6). Acceptance reaches it on the emulator's `localhost:8787` through
+  `adb reverse`; the `test`-stage Maestro smoke calls it directly. Every test uses a fresh identity
+  from it and deletes any account it creates.
 - **Times from the API are naive local date-times** (`2026-10-07T09:00:00`, no zone). Parse them
   as `LocalDateTime`, never `Instant` or `ZonedDateTime`.
 - **CI failures arrive as check-run annotations**, written by `.github/scripts/summarise-failures.py`

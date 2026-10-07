@@ -1,0 +1,12 @@
+{
+  "name": "mootmaker-android-email-helper",
+  "private": true,
+  "type": "module",
+  "description": "Serves real Cognito verification codes to the emulator and to Maestro (design Decision 6 and Q5-A).",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "mootmaker-email-testing": "github:geoffweatherall/mootmaker-email-testing#v1.0.0"
+  }
+}

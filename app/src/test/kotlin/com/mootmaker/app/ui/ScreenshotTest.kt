@@ -3,6 +3,12 @@ package com.mootmaker.app.ui
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mootmaker.app.ui.account.ForgotPasswordActions
+import com.mootmaker.app.ui.account.ForgotPasswordScreen
+import com.mootmaker.app.ui.account.ForgotPasswordState
+import com.mootmaker.app.ui.account.SignUpActions
+import com.mootmaker.app.ui.account.SignUpScreen
+import com.mootmaker.app.ui.account.SignUpState
 import com.mootmaker.app.ui.addmeeting.AddMeetingActions
 import com.mootmaker.app.ui.addmeeting.AddMeetingScreen
 import com.mootmaker.app.ui.addmeeting.AddMeetingState
@@ -179,5 +185,49 @@ class ScreenshotTest {
     @Test
     fun settingsRejected() = capture("settings-rejected") {
         SettingsScreen(settingsState.copy(name = "", nameStatus = SectionStatus(errors = listOf("Name must not be blank.")), formatStatus = SectionStatus(success = "Your date and time formats were updated.")), noSettingsActions)
+    }
+
+    private val noSignUpActions = SignUpActions({}, {}, {}, {}, {}, {}, {})
+    private val noForgotPasswordActions = ForgotPasswordActions({}, {}, {}, {}, {}, {})
+
+    @Test
+    fun signUp() = capture("sign-up") {
+        SignUpScreen(SignUpState(name = "Pat Example", email = "pat@example.com", password = "a-good-pw-123"), noSignUpActions)
+    }
+
+    @Test
+    fun signUpDark() = capture("sign-up-dark", dark = true) {
+        SignUpScreen(SignUpState(name = "Pat Example", email = "pat@example.com", password = "a-good-pw-123"), noSignUpActions)
+    }
+
+    @Test
+    fun signUpRefused() = capture("sign-up-refused") {
+        SignUpScreen(
+            SignUpState(email = "pat@example.com", password = "short1", missing = setOf("Name"), error = "Password did not conform with policy: Password not long enough"),
+            noSignUpActions,
+        )
+    }
+
+    @Test
+    fun signUpCode() = capture("sign-up-code") {
+        SignUpScreen(SignUpState(confirming = true, email = "pat@example.com", code = "123"), noSignUpActions)
+    }
+
+    @Test
+    fun forgotPassword() = capture("forgot-password") {
+        ForgotPasswordScreen(ForgotPasswordState(email = "pat@example.com"), noForgotPasswordActions)
+    }
+
+    @Test
+    fun forgotPasswordReset() = capture("forgot-password-reset") {
+        ForgotPasswordScreen(
+            ForgotPasswordState(resetting = true, email = "pat@example.com", code = "000000", newPassword = "a-new-pw-456", error = "Invalid verification code provided, please try again."),
+            noForgotPasswordActions,
+        )
+    }
+
+    @Test
+    fun forgotPasswordResetDark() = capture("forgot-password-reset-dark", dark = true) {
+        ForgotPasswordScreen(ForgotPasswordState(resetting = true, email = "pat@example.com"), noForgotPasswordActions)
     }
 }

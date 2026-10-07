@@ -34,9 +34,21 @@ data class SettingsState(
     val nameStatus: SectionStatus = SectionStatus(),
     val formatStatus: SectionStatus = SectionStatus(),
     val avatarStatus: SectionStatus = SectionStatus(),
+    val deletion: DeletionState = DeletionState(),
 )
 
-class SettingsViewModel(private val source: SettingsSource) : ViewModel() {
+/** The delete-account confirmation: whether it is open, the request is in flight, or the API refused it. */
+data class DeletionState(
+    val confirming: Boolean = false,
+    val deleting: Boolean = false,
+    val error: String? = null,
+)
+
+/** [onAccountDeleted] signs out: there is no session to return to once the account is gone. */
+class SettingsViewModel(
+    private val source: SettingsSource,
+    private val onAccountDeleted: suspend () -> Unit = {},
+) : ViewModel() {
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
 
@@ -85,6 +97,25 @@ class SettingsViewModel(private val source: SettingsSource) : ViewModel() {
     fun removeAvatar() {
         val personId = _state.value.profile?.personId ?: return
         run(SettingsState::avatarStatus, { s, v -> s.copy(avatarStatus = v) }, "Your photo was removed.", { s, _ -> s }) { source.removeAvatar(personId) }
+    }
+
+    fun askToDelete() = _state.update { it.copy(deletion = DeletionState(confirming = true)) }
+
+    fun keepAccount() = _state.update { if (it.deletion.deleting) it else it.copy(deletion = DeletionState()) }
+
+    fun confirmDelete() {
+        if (_state.value.deletion.deleting) return
+        _state.update { it.copy(deletion = DeletionState(confirming = true, deleting = true)) }
+        viewModelScope.launch {
+            try {
+                source.deleteMyAccount()
+                onAccountDeleted()
+            } catch (expired: SessionExpiredException) {
+                _state.update { it.copy(deletion = DeletionState()) }
+            } catch (failure: ApiException) {
+                _state.update { it.copy(deletion = DeletionState(confirming = true, error = failure.message)) }
+            }
+        }
     }
 
     private fun run(

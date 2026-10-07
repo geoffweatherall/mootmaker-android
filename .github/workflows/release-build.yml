@@ -198,13 +198,33 @@ jobs:
       - name: Read the fixture users
         run: .github/scripts/acceptance-args.sh "${{ steps.env.outputs.name }}"
 
+      # Real emailed codes for the sign-up and reset cases (design Decision 6): the host-side helper
+      # reads mootmaker-email-testing's shared queue. Fresh credentials first, because the helper
+      # outlives the hour-old ones and must still read the queue when the last test runs.
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: us-east-1
+      - name: Start the email helper
+        run: .github/scripts/start-email-helper.sh
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      # Then the test-stage smoke flow (smoke/sign-up-lifecycle.yaml) against this same environment
+      # and APK, so the flow release.yml runs against test is proven here first. The connected run
+      # uninstalls the app when it finishes, hence the install. adb reverse puts the email helper on
+      # the emulator's localhost.
       - name: Acceptance tests on an emulator, against the release build
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ENV_NAME: ${{ steps.env.outputs.name }}
         with:
           api-level: 34
           arch: x86_64
@@ -212,22 +232,33 @@ jobs:
           disable-animations: true
           # bash with pipefail, so tee doesn't hide a failing Gradle exit code. Same flags as the
           # build above, so Gradle reuses those APKs rather than building different ones.
-          script: bash -c 'set -o pipefail; ./gradlew :app:connectedReleaseAndroidTest -PmootmakerVersion=${{ inputs.version }} -PmootmakerTestBuildType=release $ACCEPTANCE_ARGS 2>&1 | tee -a build.log'
+          script: |
+            adb reverse tcp:8787 tcp:8787
+            bash -c 'set -o pipefail; ./gradlew :app:connectedReleaseAndroidTest -PmootmakerVersion=${{ inputs.version }} -PmootmakerTestBuildType=release $ACCEPTANCE_ARGS 2>&1 | tee -a build.log'
+            adb install -r app/build/outputs/apk/release/app-release.apk
+            bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENV_NAME" smoke/sign-up-lifecycle.yaml 2>&1 | tee maestro.log'
 
       - name: Summarise failures
         if: always()
         run: |
           if [[ -f build.log ]]; then .github/scripts/gradle-errors.sh build.log; fi
           python3 .github/scripts/summarise-failures.py \
-            "app/build/outputs/androidTest-results/**/*.xml" "app/build/test-results/**/*.xml" "data/build/test-results/**/*.xml"
+            "app/build/outputs/androidTest-results/**/*.xml" "app/build/test-results/**/*.xml" "data/build/test-results/**/*.xml" "maestro-report.xml"
+      - name: Stop the email helper
+        if: always()
+        run: if [[ -f "$RUNNER_TEMP/email-helper.pid" ]]; then kill "$(cat "$RUNNER_TEMP/email-helper.pid")" || true; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-acceptance-reports-${{ inputs.version }}-${{ github.run_attempt }}
           path: |
             build.log
+            maestro.log
+            maestro-report.xml
+            maestro-debug
             app/build/outputs/androidTest-results
             app/build/reports/androidTests
+            ${{ runner.temp }}/email-helper.log
 
       # Fresh credentials: the first set may have expired during a long run, and teardown is the
       # step that must not fail.

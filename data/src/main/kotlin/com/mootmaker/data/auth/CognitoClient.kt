@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -115,6 +116,65 @@ class CognitoClient(
             accessToken = result.string("AccessToken")!!,
             refreshToken = result.string("RefreshToken") ?: refreshToken,
         )
+    }
+
+    /**
+     * Registers an unconfirmed user; Cognito emails them a verification code. The name is a user
+     * attribute that the pool's PostConfirmation trigger turns into a linked Person (use case A.5).
+     */
+    suspend fun signUp(email: String, password: String, name: String) = withContext(io) {
+        call(
+            "SignUp",
+            buildJsonObject {
+                put("ClientId", clientId)
+                put("Username", email)
+                put("Password", password)
+                put("UserAttributes", buildJsonArray { add(buildJsonObject { put("Name", "name"); put("Value", name) }) })
+            },
+        )
+        Unit
+    }
+
+    /** Confirms a sign-up with the emailed code. It doesn't sign in: the caller does that next. */
+    suspend fun confirmSignUp(email: String, code: String) = withContext(io) {
+        call(
+            "ConfirmSignUp",
+            buildJsonObject {
+                put("ClientId", clientId)
+                put("Username", email)
+                put("ConfirmationCode", code)
+            },
+        )
+        Unit
+    }
+
+    /**
+     * Starts a password reset; Cognito emails a code. With prevent_user_existence_errors on the
+     * pool, an email with no account succeeds the same way, so this reveals nothing (use case C.17).
+     */
+    suspend fun forgotPassword(email: String) = withContext(io) {
+        call(
+            "ForgotPassword",
+            buildJsonObject {
+                put("ClientId", clientId)
+                put("Username", email)
+            },
+        )
+        Unit
+    }
+
+    /** Sets a new password with the emailed code. It doesn't sign in: the caller does that next. */
+    suspend fun confirmForgotPassword(email: String, code: String, newPassword: String) = withContext(io) {
+        call(
+            "ConfirmForgotPassword",
+            buildJsonObject {
+                put("ClientId", clientId)
+                put("Username", email)
+                put("ConfirmationCode", code)
+                put("Password", newPassword)
+            },
+        )
+        Unit
     }
 
     /** Revokes the refresh token server-side. Best effort: signing out locally never waits on it. */

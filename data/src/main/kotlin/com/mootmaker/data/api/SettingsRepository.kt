@@ -4,6 +4,7 @@ import com.apollographql.apollo.ApolloClient
 import com.mootmaker.data.agenda.DateFormat
 import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.graphql.ConfirmAvatarUploadMutation
+import com.mootmaker.data.graphql.DeleteMyAccountMutation
 import com.mootmaker.data.graphql.RemoveAvatarMutation
 import com.mootmaker.data.graphql.RequestAvatarUploadMutation
 import com.mootmaker.data.graphql.SettingsQuery
@@ -38,6 +39,9 @@ interface SettingsSource {
     suspend fun setAvatar(personId: String, bytes: ByteArray, contentType: String): SettingsResult
 
     suspend fun removeAvatar(personId: String): SettingsResult
+
+    /** Deletes the caller's account for good, or throws an [ApiException] worded for the screen. */
+    suspend fun deleteMyAccount()
 }
 
 /** Reads and changes the caller's own profile. Validation, including the image's, stays on the server. */
@@ -98,6 +102,11 @@ class SettingsRepository(
         return outcome(result.errors.map { avatarErrorMessage(it.rawValue) }, result.person != null)
     }
 
+    override suspend fun deleteMyAccount() {
+        val deleted = apollo().send(DeleteMyAccountMutation(), idToken(), DELETE_FAILED).deleteMyAccount
+        if (!deleted) throw ApiException(DELETE_FAILED)
+    }
+
     /**
      * The presigned PUT. It must carry exactly the declared Content-Type and length and no
      * Authorization header: the URL's signature covers both, and the bucket refuses a stray one.
@@ -121,5 +130,6 @@ class SettingsRepository(
 
     private companion object {
         const val FAILED = "Something went wrong saving your settings."
+        const val DELETE_FAILED = "Something went wrong deleting your account."
     }
 }

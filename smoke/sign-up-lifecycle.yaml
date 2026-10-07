@@ -1,0 +1,107 @@
+# Release smoke for the `test` stage (design: Release pipeline, M8): sign up with a real emailed
+# code, use the app, then delete the account, run by Maestro against the RELEASE APK. It mirrors the
+# webapp's test-stage.spec.ts, and leaves nothing behind. Codes come from the email helper
+# (email-helper/server.mjs) on the host, which the workflow starts. Never run against production:
+# it writes. See .github/workflows/smoke.yml; release-build.yml also runs it against its own
+# ephemeral environment, which is how a pull request proves it.
+appId: com.mootmaker.android
+env:
+  ENVIRONMENT: test
+  EMAIL_HELPER: http://localhost:8787
+---
+- launchApp:
+    clearState: true
+- tapOn: "About"
+- repeat:
+    times: 7
+    commands:
+      - tapOn: "Version .*"
+- tapOn: "Environment name"
+- inputText: ${ENVIRONMENT}
+# The keyboard covers the button under the field: hide it, and scroll in case it is still below.
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Switch environment"
+    direction: DOWN
+- tapOn: "Switch environment"
+- extendedWaitUntil:
+    visible: "Environment: ${ENVIRONMENT}"
+    timeout: 10000
+- back
+- runScript: scripts/fresh-account.js
+# Sign up: the details, then the code from the real email.
+- extendedWaitUntil:
+    visible: "Create an account"
+    timeout: 30000
+- tapOn: "Create an account"
+- tapOn: "Name"
+- inputText: ${output.account.name}
+- hideKeyboard
+- tapOn: "Email"
+- inputText: ${output.account.email}
+- hideKeyboard
+- tapOn: "Password"
+- inputText: ${output.account.password}
+- hideKeyboard
+- tapOn:
+    text: "Sign up"
+    below: "Password"
+- extendedWaitUntil:
+    visible: "Verification code"
+    timeout: 30000
+- runScript:
+    file: scripts/wait-for-code.js
+    env:
+      EMAIL: ${output.account.email}
+- tapOn: "Verification code"
+- inputText: ${output.code}
+- hideKeyboard
+- tapOn: "Confirm"
+# Signed in as the new person, and the app works: home, then room availability.
+- extendedWaitUntil:
+    visible: ${output.account.name}
+    timeout: 30000
+- assertNotVisible: "Try again"
+- tapOn: "Rooms today"
+- extendedWaitUntil:
+    visible: "Room availability"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Capacity .*|No rooms exist yet\\."
+    timeout: 30000
+- back
+# Delete the account, which signs out.
+- tapOn: "More options"
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Your name"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Delete my account"
+    direction: DOWN
+- tapOn: "Delete my account"
+- extendedWaitUntil:
+    visible: "Delete your account?"
+    timeout: 10000
+# The dialog's button: right of its Cancel, unlike the section's button behind it.
+- tapOn:
+    text: "Delete my account"
+    rightOf: "Cancel"
+- extendedWaitUntil:
+    visible: "Create an account"
+    timeout: 30000
+# The account is gone: its password no longer signs in.
+- tapOn: "Email"
+- eraseText
+- inputText: ${output.account.email}
+- hideKeyboard
+- tapOn: "Password"
+- eraseText
+- inputText: ${output.account.password}
+- hideKeyboard
+- tapOn:
+    text: "Sign in"
+    below: "Password"
+- extendedWaitUntil:
+    visible: "Incorrect username or password."
+    timeout: 30000
