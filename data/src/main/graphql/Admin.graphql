@@ -1,0 +1,88 @@
+# The admin screens: rooms and people (M9). Every mutation here is admin-only on the server; the app
+# only offers them to an admin, as the webapp's RequireAdmin does. A rejection comes back as a
+# successful response with `errors` set, and each result carries the whole list after the change.
+
+query AdminRooms {
+  workspace {
+    rooms {
+      id
+      name
+      capacity
+      color
+    }
+  }
+}
+
+query AdminPeople {
+  workspace {
+    me {
+      id
+    }
+    people {
+      id
+      name
+      isAdmin
+      linkedEmails
+      avatarUrl
+    }
+  }
+}
+
+mutation CreateRoom($room: RoomInput!) {
+  createRoom(room: $room) {
+    room {
+      id
+    }
+    errors
+  }
+}
+
+mutation UpdateRoom($id: ID!, $room: RoomInput!) {
+  updateRoom(id: $id, room: $room) {
+    room {
+      id
+    }
+    errors
+  }
+}
+
+mutation DeleteRoom($id: ID!) {
+  deleteRoom(id: $id) {
+    errors
+  }
+}
+
+mutation CreatePerson($name: String!) {
+  createPerson(name: $name) {
+    person {
+      id
+    }
+    errors
+  }
+}
+
+mutation RenamePerson($id: ID!, $name: String!) {
+  renamePerson(id: $id, name: $name) {
+    person {
+      id
+    }
+    errors
+  }
+}
+
+# cognitoSyncFailed: the Person changed but the sign-in account didn't yet; retrying is safe.
+mutation SetPersonAdmin($id: ID!, $isAdmin: Boolean!) {
+  setPersonAdmin(id: $id, isAdmin: $isAdmin) {
+    person {
+      id
+    }
+    cognitoSyncFailed
+    errors
+  }
+}
+
+mutation DeletePerson($id: ID!) {
+  deletePerson(id: $id) {
+    errors
+  }
+}

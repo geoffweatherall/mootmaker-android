@@ -286,6 +286,23 @@ class Api(private val account: Acceptance.Account) {
         day.jsonObject["meetings"]!!.jsonArray.map { it.jsonObject.string("subject") }
     }
 
+    fun roomNames(): List<String> =
+        query("query { workspace { rooms { name } } }")["workspace"]!!.jsonObject["rooms"]!!.jsonArray.map { it.jsonObject.string("name") }
+
+    fun roomIdNamed(name: String): String =
+        query("query { workspace { rooms { id name } } }")["workspace"]!!.jsonObject["rooms"]!!.jsonArray
+            .map { it.jsonObject }.first { it.string("name") == name }.string("id")
+
+    fun personNames(): List<String> =
+        query("query { workspace { people { name } } }")["workspace"]!!.jsonObject["people"]!!.jsonArray.map { it.jsonObject.string("name") }
+
+    /** The room name the meeting called [subject] on [date] shows, as every reader sees it after a room edit. */
+    fun subjectsRoomOn(date: String, subject: String): String? = query(
+        "query(\$d: [String!]) { workspace(dates: \$d) { days { meetings { subject room { name } } } } }",
+        buildJsonObject { put("d", JsonArray(listOf(JsonPrimitive(date)))) },
+    )["workspace"]!!.jsonObject["days"]!!.jsonArray.flatMap { it.jsonObject["meetings"]!!.jsonArray }
+        .map { it.jsonObject }.firstOrNull { it.string("subject") == subject }?.get("room")?.jsonObject?.string("name")
+
     /** Deletes the caller's own account. Tests that create an account use it to leave nothing behind. */
     fun deleteMyAccount() {
         check(query("mutation { deleteMyAccount }")["deleteMyAccount"]!!.jsonPrimitive.content == "true") { "deleteMyAccount returned false" }

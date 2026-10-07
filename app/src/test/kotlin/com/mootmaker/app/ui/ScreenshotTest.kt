@@ -3,6 +3,17 @@ package com.mootmaker.app.ui
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mootmaker.app.ui.admin.PersonEditor
+import com.mootmaker.app.ui.admin.PersonsActions
+import com.mootmaker.app.ui.admin.PersonsScreen
+import com.mootmaker.app.ui.admin.PersonsState
+import com.mootmaker.app.ui.admin.RoomEditor
+import com.mootmaker.app.ui.admin.RoomsActions
+import com.mootmaker.app.ui.admin.RoomsScreen
+import com.mootmaker.app.ui.admin.RoomsState
+import com.mootmaker.data.admin.AdminPerson
+import com.mootmaker.data.admin.AdminRoom
+import com.mootmaker.data.agenda.RoomColor
 import com.mootmaker.app.ui.account.ForgotPasswordActions
 import com.mootmaker.app.ui.account.ForgotPasswordScreen
 import com.mootmaker.app.ui.account.ForgotPasswordState
@@ -229,5 +240,56 @@ class ScreenshotTest {
     @Test
     fun forgotPasswordResetDark() = capture("forgot-password-reset-dark", dark = true) {
         ForgotPasswordScreen(ForgotPasswordState(resetting = true, email = "pat@example.com"), noForgotPasswordActions)
+    }
+
+    private val adminRooms = listOf(
+        AdminRoom("r1", "Atrium", 16, RoomColor.Green, colorSlot = 5),
+        AdminRoom("r2", "Boardroom", 6, null, colorSlot = 1),
+        AdminRoom("r3", "The Hub", 4, RoomColor.Violet),
+    )
+    private val adminPeople = listOf(
+        AdminPerson("p1", "Pat Example", isAdmin = true, linkedEmails = listOf("pat@example.com"), avatarUrl = null, isSelf = true),
+        AdminPerson("p2", "Guest Gale", isAdmin = false, linkedEmails = emptyList(), avatarUrl = null, isSelf = false),
+        AdminPerson("p3", "Sam Other", isAdmin = false, linkedEmails = listOf("sam@example.com", "sam.other@example.org"), avatarUrl = null, isSelf = false),
+    )
+    private val noRoomsActions = RoomsActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+    private val noPersonsActions = PersonsActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+
+    @Test
+    fun rooms() = capture("admin-rooms") {
+        RoomsScreen(RoomsState(rooms = adminRooms, loaded = true), noRoomsActions)
+    }
+
+    @Test
+    fun roomsDark() = capture("admin-rooms-dark", dark = true) {
+        RoomsScreen(RoomsState(rooms = adminRooms, loaded = true), noRoomsActions)
+    }
+
+    @Test
+    fun roomEditorRefused() = capture("admin-room-editor-refused") {
+        RoomsScreen(
+            RoomsState(rooms = adminRooms, loaded = true, editor = RoomEditor(name = "", capacity = "1", color = RoomColor.Orange, errors = listOf("Name must not be blank.", "Room capacity must be at least 2."))),
+            noRoomsActions,
+        )
+    }
+
+    @Test
+    fun persons() = capture("admin-persons") {
+        PersonsScreen(PersonsState(people = adminPeople, loaded = true), noPersonsActions)
+    }
+
+    @Test
+    fun personsDark() = capture("admin-persons-dark", dark = true) {
+        PersonsScreen(PersonsState(people = adminPeople, loaded = true), noPersonsActions)
+    }
+
+    @Test
+    fun personEditor() = capture("admin-person-editor") {
+        PersonsScreen(PersonsState(people = adminPeople, loaded = true, editor = PersonEditor(adminPeople[2], "Sam Other", isAdmin = true)), noPersonsActions)
+    }
+
+    @Test
+    fun personEditorGuest() = capture("admin-person-editor-guest") {
+        PersonsScreen(PersonsState(people = adminPeople, loaded = true, editor = PersonEditor(adminPeople[1], "Guest Gale", isAdmin = false)), noPersonsActions)
     }
 }

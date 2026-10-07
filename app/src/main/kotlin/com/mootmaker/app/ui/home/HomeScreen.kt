@@ -79,6 +79,10 @@ data class HomeActions(
     val onRespond: (meetingId: String, status: AttendeeStatus) -> Unit = { _, _ -> },
     val onSearchFurtherAhead: () -> Unit = {},
     val onSettings: () -> Unit = {},
+    /** Rooms and Persons are offered only to an admin (use cases L.89, P.124, Q.132); the API enforces the rest. */
+    val isAdmin: Boolean = false,
+    val onRooms: () -> Unit = {},
+    val onPersons: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,6 +98,10 @@ fun HomeScreen(state: HomeState, fallbackName: String?, actions: HomeActions) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More options")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (actions.isAdmin) {
+                            DropdownMenuItem(text = { Text("Rooms") }, onClick = { menuOpen = false; actions.onRooms() })
+                            DropdownMenuItem(text = { Text("Persons") }, onClick = { menuOpen = false; actions.onPersons() })
+                        }
                         DropdownMenuItem(text = { Text("Settings") }, onClick = { menuOpen = false; actions.onSettings() })
                         DropdownMenuItem(text = { Text("About") }, onClick = { menuOpen = false; actions.onAbout() })
                         DropdownMenuItem(text = { Text("Sign out") }, onClick = { menuOpen = false; actions.onSignOut() })

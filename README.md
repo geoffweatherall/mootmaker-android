@@ -2,10 +2,10 @@
 
 A native Android app, a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** milestones M0 to M8 are built: sign up, sign in and reset your password; your agenda,
+**Status:** milestones M0 to M9 are built: sign up, sign in and reset your password; your agenda,
 room availability, meeting details and person calendars; add, edit, cancel and respond to meetings,
-with live updates; settings, avatars and deleting your account. Admin screens (M9) are still
-webapp-only. The plan is [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
+with live updates; settings, avatars and deleting your account; and, for admins, managing rooms and
+people. M10 (parity close-out) is next. The plan is [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
 in the hub repository.
 
 ## Layout
