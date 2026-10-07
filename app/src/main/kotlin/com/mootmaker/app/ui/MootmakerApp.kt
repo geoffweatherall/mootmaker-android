@@ -13,7 +13,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -95,6 +98,12 @@ fun MootmakerApp(container: AppContainer) {
     val links = WebLinks(configState.environment.siteUrl)
     val open: (String) -> Unit = { openInCustomTab(context, it) }
 
+    // Live updates run only while signed in and in the foreground; leaving either closes the socket.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(signedIn, lifecycle) {
+        if (signedIn) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { container.followLiveUpdates() }
+    }
+
     LaunchedEffect(signedIn) { navController.resetTo(if (signedIn) Routes.HOME else Routes.SIGN_IN) }
 
     NavHost(navController, startDestination = if (signedIn) Routes.HOME else Routes.SIGN_IN) {
@@ -129,6 +138,7 @@ fun MootmakerApp(container: AppContainer) {
                 viewModel.refresh()
                 onPauseOrDispose { }
             }
+            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refreshForLiveChange() } }
             HomeScreen(
                 state = state,
                 fallbackName = claims?.name ?: claims?.email,
@@ -153,6 +163,7 @@ fun MootmakerApp(container: AppContainer) {
                 viewModel.refresh()
                 onPauseOrDispose { }
             }
+            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refresh() } }
             AvailabilityScreen(
                 state = state,
                 actions = AvailabilityActions(
@@ -231,6 +242,7 @@ fun MootmakerApp(container: AppContainer) {
                 viewModel.refresh()
                 onPauseOrDispose { }
             }
+            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refreshForLiveChange() } }
             MeetingDetailsScreen(
                 state = state,
                 actions = MeetingDetailsActions(
@@ -259,6 +271,7 @@ fun MootmakerApp(container: AppContainer) {
                 viewModel.refresh()
                 onPauseOrDispose { }
             }
+            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refresh() } }
             CalendarScreen(
                 state = state,
                 actions = CalendarActions(

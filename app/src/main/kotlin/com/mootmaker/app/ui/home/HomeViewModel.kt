@@ -40,8 +40,9 @@ class HomeViewModel(
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+    private var reloadWhenDone = false
 
-    /** Refetches. Called whenever the screen becomes visible (design: refetch on visible until M6). */
+    /** Refetches. Called whenever the screen becomes visible, and by [refreshForLiveChange]. */
     fun refresh() {
         if (loadJob?.isActive == true) return
         val today = clock()
@@ -56,7 +57,16 @@ class HomeViewModel(
             } catch (failure: ApiException) {
                 _state.update { it.copy(loading = false, error = failure.message) }
             }
-        }
+        }.also { job -> job.invokeOnCompletion { if (reloadWhenDone) { reloadWhenDone = false; refresh() } } }
+    }
+
+    /**
+     * A live broadcast says what is held may be stale. A load already in flight may have read the
+     * server before that change, so it is followed by another rather than trusted (the webapp's
+     * in-flight race: stale data landing after the eviction, with nothing left to refetch it).
+     */
+    fun refreshForLiveChange() {
+        if (loadJob?.isActive == true) reloadWhenDone = true else refresh()
     }
 
     /** Widens the needs-response window by another step and reloads. */
