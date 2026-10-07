@@ -21,10 +21,11 @@ import org.junit.Test
  * e2e: real Cognito SRP sign-in and a real GraphQL query, as production's public demo user.
  * Read-only, the same thing anyone does on the website's home page.
  *
- * Interim until `mobile-config.json` and the Android Cognito client exist: CI reads production's
- * webapp `env-config.js` and passes its values as instrumentation arguments, so this signs in
- * through the webapp's app client (which allows SRP, like the Android one will). Skipped when the
- * arguments are absent. Once `mobile-config.json` is published, this should fetch it instead.
+ * CI reads production's configuration and passes it as instrumentation arguments
+ * (.github/scripts/production-demo-args.py). It prefers `mobile-config.json` with the Android
+ * Cognito client. Until a release publishes that file, it falls back to the webapp's
+ * `env-config.js` and signs in through the webapp's client, which also allows SRP. A check-run
+ * notice names the source used. Skipped when the arguments are absent.
  */
 class ProductionDemoE2eTest {
     @get:Rule

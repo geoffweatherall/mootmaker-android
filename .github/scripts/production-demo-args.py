@@ -1,30 +1,55 @@
 #!/usr/bin/env python3
-"""Instrumentation arguments for ProductionDemoE2eTest, read from production's env-config.js.
+"""Instrumentation arguments for ProductionDemoE2eTest, written to $GITHUB_ENV as E2E_ARGS.
 
-Writes them to $GITHUB_ENV as E2E_ARGS. Interim: once the webapp publishes mobile-config.json with the Android client id, the test should
-fetch that itself and this script goes away. Leaves E2E_ARGS empty (so the test skips, with a
-warning annotation) if it can't read the file. The demo credentials are public: the website shows them to every visitor.
+Prefers production's mobile-config.json with the Android Cognito client, which is what the app
+itself reads. Until a release has published that file, it falls back to the webapp's env-config.js
+and the webapp's client, which also allows SRP. An annotation names the source used. If neither
+can be read, E2E_ARGS stays empty, the test is skipped and a warning says so. The demo
+credentials are public: the website shows them to every visitor.
 """
 import json
-import re
 import os
+import re
 import urllib.request
 
-try:
-    text = urllib.request.urlopen("https://www.mootmaker.com/env-config.js", timeout=20).read().decode()
-    config = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
-    args = {
-        "e2eGraphqlUrl": config["GRAPHQL_API_URL"],
-        "e2eUserPoolId": config["COGNITO_USER_POOL_ID"],
-        "e2eClientId": config["COGNITO_CLIENT_ID"],
-        "e2eEmail": config["DEMO_USER_EMAIL"],
-        "e2ePassword": config["DEMO_USER_PASSWORD"],
-    }
-    if any(re.search(r"\s", value) for value in args.values()):
-        raise ValueError("a value contains whitespace, which the emulator runner's shell would split")
-except Exception as error:  # noqa: BLE001 - any failure means "skip", reported as a warning
-    print(f"::warning title=e2e skipped::Could not read production env-config.js: {error}", flush=True)
-    args = {}
+SITE = "https://www.mootmaker.com"
+
+
+def fetch(path):
+    return urllib.request.urlopen(f"{SITE}/{path}", timeout=20).read().decode()
+
+
+def from_mobile_config():
+    config = json.loads(fetch("mobile-config.json"))
+    return config, config["COGNITO_ANDROID_CLIENT_ID"]
+
+
+def from_env_config():
+    config = json.loads(re.search(r"\{.*\}", fetch("env-config.js"), re.S).group(0))
+    return config, config["COGNITO_CLIENT_ID"]
+
+
+args = {}
+for source, read in (("mobile-config.json (Android client)", from_mobile_config), ("env-config.js (webapp client)", from_env_config)):
+    try:
+        config, client_id = read()
+        args = {
+            "e2eGraphqlUrl": config["GRAPHQL_API_URL"],
+            "e2eUserPoolId": config["COGNITO_USER_POOL_ID"],
+            "e2eClientId": client_id,
+            "e2eEmail": config["DEMO_USER_EMAIL"],
+            "e2ePassword": config["DEMO_USER_PASSWORD"],
+        }
+        if any(re.search(r"\s", value) for value in args.values()):
+            raise ValueError("a value contains whitespace, which the emulator runner's shell would split")
+        print(f"::notice title=e2e config::Production e2e uses {source}", flush=True)
+        break
+    except Exception as error:  # noqa: BLE001 - try the next source, or skip with a warning
+        print(f"{source}: {error}", flush=True)
+        args = {}
+if not args:
+    print("::warning title=e2e skipped::Could not read production's mobile-config.json or env-config.js", flush=True)
+
 line = " ".join(f"-Pandroid.testInstrumentationRunnerArguments.{k}={v}" for k, v in args.items())
 with open(os.environ["GITHUB_ENV"], "a") as env:
     env.write(f"E2E_ARGS={line}\n")
