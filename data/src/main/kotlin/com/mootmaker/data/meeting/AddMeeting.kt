@@ -37,6 +37,20 @@ data class MeetingDraft(
     val attendeeIds: List<String>,
     val startTime: String,
     val endTime: String,
+    /** Editing only: the version the form was loaded at. */
+    val expectedVersion: String? = null,
+)
+
+/** A meeting the edit form opens on, as the API has it. */
+data class ExistingMeeting(
+    val id: String,
+    val subject: String,
+    val startTime: String,
+    val endTime: String,
+    val roomId: String,
+    val organiserId: String,
+    val attendeeIds: List<String>,
+    val version: String,
 )
 
 /** The outcome of a booking: the new meeting, or every validation rule it broke, worded for the screen. */
@@ -150,7 +164,7 @@ fun meetingErrorMessage(code: String): String = when (code) {
     "TooManyMeetingsInOneCall" -> "Too many meetings were sent in a single request."
     "MeetingNotFound" -> "This meeting no longer exists - it may have been deleted."
     "MeetingChanged" ->
-        "Someone else changed this meeting after you opened it, so your changes were not saved. Reload the page to see their changes, then make yours again."
+        "Someone else changed this meeting after you opened it, so your changes were not saved. Go back and open it again to see their changes, then make yours again."
     // A rule from a newer API than this build knows: still say something rather than nothing.
     else -> "The meeting could not be saved ($code)."
 }

@@ -54,4 +54,36 @@ class MeetingDetailsTest {
     fun theShareLinkIsTheWebappsMeetingPage() {
         assertEquals("https://www.mootmaker.com/meetings/m1", meetingShareUrl("https://www.mootmaker.com", "m1"))
     }
+
+    // Use cases O.114 and O.115: the organiser and an admin get Edit and Cancel; nobody else does.
+    @Test
+    fun onlyTheOrganiserOrAnAdminCanEditAndCancel() {
+        val detail = buildMeetingDetail(meeting, emptyList())
+        assertEquals(true, canEditMeeting(detail, myPersonId = "p1", isAdmin = false))
+        assertEquals(true, canEditMeeting(detail, myPersonId = "p9", isAdmin = true))
+        assertEquals(false, canEditMeeting(detail, myPersonId = "p2", isAdmin = false))
+        assertEquals(false, canEditMeeting(detail, myPersonId = null, isAdmin = false))
+    }
+
+    // Use case H.108: only an attendee has a response to give; the organiser is implicitly going.
+    @Test
+    fun onlyAnAttendeeHasAResponseRow() {
+        val detail = buildMeetingDetail(meeting, emptyList())
+        assertEquals(AttendeeStatus.Maybe, myAttendeeRow(detail, "p2")?.status)
+        assertEquals(null, myAttendeeRow(detail, "p1"))
+        assertEquals(null, myAttendeeRow(detail, null))
+    }
+
+    @Test
+    fun theVersionAndRoomIdComeThroughForEditing() {
+        val detail = buildMeetingDetail(meeting.copy(version = "v3"), emptyList())
+        assertEquals("v3", detail.version)
+        assertEquals("r2", detail.roomId)
+    }
+
+    @Test
+    fun respondErrorsAreWordedForTheScreen() {
+        assertEquals("You aren't an attendee of this meeting, so there's nothing to respond to.", respondErrorMessage("NotAnAttendee"))
+        assertEquals("This meeting no longer exists - it may have been deleted.", respondErrorMessage("MeetingNotFound"))
+    }
 }

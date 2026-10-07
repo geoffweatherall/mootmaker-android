@@ -1,8 +1,11 @@
 package com.mootmaker.data.agenda
 
+import com.mootmaker.data.meeting.AttendeeStatus
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import java.util.Locale
 
 /** Mirrors the API's TimeFormat enum. Display only: the API always speaks ISO-8601. */
 enum class TimeFormat { TwentyFourHour, AmPm }
@@ -22,6 +25,8 @@ data class AgendaRow(
     val roomName: String,
     /** Index into the room palette: the room's own colour, or its position by name. */
     val roomColorSlot: Int,
+    /** The viewer's own response, or null when they organise the meeting (who is implicitly going). */
+    val myStatus: AttendeeStatus? = null,
 )
 
 data class AgendaDay(val date: LocalDate, val rows: List<AgendaRow>)
@@ -41,6 +46,9 @@ data class MeetingInput(
     val roomId: String,
     val organiserId: String,
     val attendeeIds: List<String>,
+    val organiserName: String = "",
+    /** Response by attendee id; an attendee missing from here has not responded. */
+    val attendeeStatuses: Map<String, AttendeeStatus> = emptyMap(),
 )
 data class DayInput(val date: String, val meetings: List<MeetingInput>)
 
@@ -77,6 +85,7 @@ fun agendaDay(personId: String, date: LocalDate, days: List<DayInput>, rooms: Li
                 endTime = it.endTime,
                 roomName = roomsById[it.roomId]?.name.orEmpty(),
                 roomColorSlot = slotByRoomId[it.roomId] ?: 0,
+                myStatus = if (it.organiserId == personId) null else it.attendeeStatuses[personId] ?: AttendeeStatus.NoResponse,
             )
         }
     return AgendaDay(date, rows)
@@ -131,4 +140,54 @@ fun formatDate(isoLocalDateTime: String, dateFormat: DateFormat): String {
         DateFormat.British -> "$day/$month/$year"
         DateFormat.Usa -> "$month/$day/$year"
     }
+}
+
+/** A meeting the caller has been invited to and not yet answered (use case D.107). */
+data class NeedsResponseItem(
+    val meetingId: String,
+    val subject: String,
+    val startTime: String,
+    val endTime: String,
+    val roomName: String,
+    val roomColorSlot: Int,
+    val organiserName: String,
+)
+
+/**
+ * Every meeting in [days] where [personId] is an attendee, never the organiser (who is implicitly
+ * going), and still has no response, soonest first.
+ */
+fun needsResponse(personId: String, days: List<DayInput>, rooms: List<RoomInput>): List<NeedsResponseItem> {
+    val roomsById = rooms.associateBy { it.id }
+    val slotByRoomId = roomColorSlots(rooms)
+    return days.flatMap { it.meetings }
+        .filter { it.organiserId != personId && personId in it.attendeeIds }
+        .filter { (it.attendeeStatuses[personId] ?: AttendeeStatus.NoResponse) == AttendeeStatus.NoResponse }
+        .sortedBy { it.startTime }
+        .map {
+            NeedsResponseItem(
+                meetingId = it.id,
+                subject = it.subject,
+                startTime = it.startTime,
+                endTime = it.endTime,
+                roomName = roomsById[it.roomId]?.name.orEmpty(),
+                roomColorSlot = slotByRoomId[it.roomId] ?: 0,
+                organiserName = it.organiserName,
+            )
+        }
+}
+
+/** Days the first window covers: today and the two after it, as the webapp's. */
+const val INITIAL_WINDOW_DAYS = 3
+
+/** Days each "Search further ahead" adds. */
+const val SEARCH_STEP_DAYS = 3
+
+/** The last day covered once [level] searches have been made (level 0 is the initial window). */
+fun windowEnd(today: LocalDate, level: Int): LocalDate = today.plusDays((INITIAL_WINDOW_DAYS - 1 + level * SEARCH_STEP_DAYS).toLong())
+
+/** "Wed 7 Oct – Fri 9 Oct": always names both ends, so "nothing waiting" always says for when. */
+fun formatRangeLabel(today: LocalDate, end: LocalDate, locale: Locale = Locale.getDefault()): String {
+    val format = DateTimeFormatter.ofPattern("EEE d MMM", locale)
+    return "${today.format(format)} – ${end.format(format)}"
 }

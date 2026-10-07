@@ -20,6 +20,8 @@ data class IdTokenClaims(
     /** The linked Person's id, or null for an account with none (use case D.24). */
     val personId: String?,
     val expiresAt: Instant,
+    /** The ID token's `custom:class` is "admin". Presentation only: the API enforces what an admin may do. */
+    val isAdmin: Boolean = false,
 ) {
     companion object {
         fun parse(idToken: String): IdTokenClaims {
@@ -31,6 +33,7 @@ data class IdTokenClaims(
                 name = payload.string("name"),
                 personId = payload.string("custom:personId")?.takeIf { it.isNotBlank() },
                 expiresAt = Instant.ofEpochSecond((payload["exp"] as? JsonPrimitive)?.longOrNull ?: 0),
+                isAdmin = payload.string("custom:class") == "admin",
             )
         }
 

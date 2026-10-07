@@ -6,6 +6,7 @@ import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.api.ApiException
 import com.mootmaker.data.api.MeetingFormSource
 import com.mootmaker.data.meeting.CreateResult
+import com.mootmaker.data.meeting.ExistingMeeting
 import com.mootmaker.data.meeting.MeetingDraft
 import com.mootmaker.data.meeting.MeetingFormReference
 import com.mootmaker.data.meeting.NO_ROOM_AVAILABLE_MESSAGE
@@ -42,6 +43,9 @@ class AddMeetingViewModelTest {
     private val drafts = mutableListOf<MeetingDraft>()
     private var result: CreateResult = CreateResult.Created("m-new")
     private var gate: CompletableDeferred<Unit>? = null
+    private val excludedMeetingIds = mutableListOf<String?>()
+    private val updates = mutableListOf<Pair<String, MeetingDraft>>()
+    private var existing: ExistingMeeting? = ExistingMeeting("m9", "Weekly sync", "2026-10-09T14:00:00", "2026-10-09T15:30:00", "r2", "p2", listOf("p1"), "v7")
 
     private val source = object : MeetingFormSource {
         override suspend fun loadReference(): MeetingFormReference {
@@ -49,14 +53,22 @@ class AddMeetingViewModelTest {
             return reference
         }
 
-        override suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int): List<RoomOption> {
+        override suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int, excludingMeetingId: String?): List<RoomOption> {
             suggestCalls += Triple(startTime, endTime, requiredCapacity)
+            excludedMeetingIds += excludingMeetingId
             return suggestions
         }
 
         override suspend fun create(draft: MeetingDraft): CreateResult {
             drafts += draft
             gate?.await()
+            return result
+        }
+
+        override suspend fun loadMeeting(meetingId: String): ExistingMeeting? = existing
+
+        override suspend fun update(meetingId: String, draft: MeetingDraft): CreateResult {
+            updates += meetingId to draft
             return result
         }
     }
@@ -155,7 +167,7 @@ class AddMeetingViewModelTest {
     fun aFailedSuggestionShowsTheFailureAndStopsSpinning() {
         val viewModel = viewModel()
         val failing = object : MeetingFormSource by source {
-            override suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int): List<RoomOption> =
+            override suspend fun suggestRooms(startTime: String, endTime: String, requiredCapacity: Int, excludingMeetingId: String?): List<RoomOption> =
                 throw ApiException("Could not reach mootmaker.")
         }
         val offline = AddMeetingViewModel(failing, day, LocalDateTime.of(2026, 10, 7, 10, 1)).also { it.load() }
@@ -217,5 +229,72 @@ class AddMeetingViewModelTest {
         viewModel.save()
         assertEquals(listOf("Could not reach mootmaker."), viewModel.state.value.errors)
         assertFalse(viewModel.state.value.saving)
+    }
+
+    private fun editingViewModel() =
+        AddMeetingViewModel(source, day, LocalDateTime.of(2026, 10, 7, 10, 1), editingMeetingId = "m9").also { it.load() }
+
+    // Use case O.112: the form opens on the meeting as it is, and the default organiser doesn't replace theirs.
+    @Test
+    fun editingStartsFromTheMeetingAsItIs() {
+        val state = editingViewModel().state.value
+        assertTrue(state.editing)
+        assertEquals("Weekly sync", state.subject)
+        assertEquals("p2", state.organiserId)
+        assertEquals(listOf("p1"), state.attendeeIds)
+        assertEquals("r2", state.roomId)
+        assertEquals(LocalDate.of(2026, 10, 9), state.date)
+        assertEquals("2026-10-09T14:00:00", state.startTime)
+        assertEquals("2026-10-09T15:30:00", state.endTime)
+        assertEquals("v7", state.version)
+    }
+
+    // The version the form was read at goes back with the save, so a stale edit is refused (MeetingChanged).
+    @Test
+    fun savingAnEditSendsTheVersionItWasLoadedAt() {
+        val viewModel = editingViewModel()
+        viewModel.setSubject("Weekly sync (moved)")
+        viewModel.save()
+
+        val (id, draft) = updates.single()
+        assertEquals("m9", id)
+        assertEquals("v7", draft.expectedVersion)
+        assertEquals("Weekly sync (moved)", draft.subject)
+        assertTrue(drafts.isEmpty())
+        assertEquals("m-new", viewModel.state.value.savedMeetingId)
+    }
+
+    // Use case O.113: a suggestion for an edit leaves the meeting's own slot out of the room check.
+    @Test
+    fun suggestingARoomWhileEditingExcludesTheMeetingItself() {
+        editingViewModel().suggestRoom()
+        assertEquals(listOf<String?>("m9"), excludedMeetingIds)
+    }
+
+    @Test
+    fun addingNeverSendsAVersionOrExcludesAMeeting() {
+        val viewModel = viewModel()
+        viewModel.suggestRoom()
+        viewModel.save()
+        assertEquals(listOf<String?>(null), excludedMeetingIds)
+        assertNull(drafts.single().expectedVersion)
+    }
+
+    // Use case O.119 for the form: a meeting that has gone says so, rather than opening an empty form.
+    @Test
+    fun editingAMeetingThatNoLongerExistsSaysSo() {
+        existing = null
+        val state = editingViewModel().state.value
+        assertEquals("This meeting no longer exists - it may have been deleted.", state.loadError)
+        assertNull(state.reference)
+    }
+
+    @Test
+    fun aRejectedEditKeepsTheFormWithTheServersReasons() {
+        result = CreateResult.Rejected(listOf("Someone else changed this meeting."))
+        val viewModel = editingViewModel()
+        viewModel.save()
+        assertEquals(listOf("Someone else changed this meeting."), viewModel.state.value.errors)
+        assertNull(viewModel.state.value.savedMeetingId)
     }
 }

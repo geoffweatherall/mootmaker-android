@@ -7,6 +7,7 @@ query MeetingDetails($id: ID!) {
     subject
     startTime
     endTime
+    version
     room {
       id
       name
@@ -34,5 +35,22 @@ query MeetingDetails($id: ID!) {
       name
       color
     }
+  }
+}
+
+# A rejected response comes back as a successful response with `errors` set, not as a GraphQL error.
+mutation RespondToMeeting($meetingId: ID!, $status: AttendeeStatus!) {
+  respondToMeeting(meetingId: $meetingId, status: $status) {
+    meeting {
+      id
+    }
+    errors
+  }
+}
+
+# Cancelling is a hard delete. Rejections come back in `errors`, as for the other writes.
+mutation CancelMeeting($id: ID!) {
+  cancelMeeting(id: $id) {
+    errors
   }
 }

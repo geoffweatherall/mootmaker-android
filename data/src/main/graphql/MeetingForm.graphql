@@ -21,8 +21,9 @@ query MeetingForm {
 }
 
 # The ranked rooms free for a slot that hold `requiredCapacity` people (organiser plus attendees).
-query SuggestRoom($startTime: String!, $endTime: String!, $requiredCapacity: Int!) {
-  suggestRoom(startTime: $startTime, endTime: $endTime, requiredCapacity: $requiredCapacity) {
+# `excludingMeetingId` is sent only when editing, so the meeting's own slot doesn't count against its room.
+query SuggestRoom($startTime: String!, $endTime: String!, $requiredCapacity: Int!, $excludingMeetingId: ID) {
+  suggestRoom(startTime: $startTime, endTime: $endTime, requiredCapacity: $requiredCapacity, excludingMeetingId: $excludingMeetingId) {
     id
     name
     capacity
@@ -35,6 +36,38 @@ mutation CreateMeeting($meeting: MeetingInput!) {
     meeting {
       id
       startTime
+    }
+    errors
+  }
+}
+
+# What the edit form starts from. `version` rides in the same request so it matches the fields shown;
+# it goes back as `expectedVersion`, so a save made from a copy someone else has since changed is refused.
+query EditMeeting($id: ID!) {
+  meeting(id: $id) {
+    id
+    subject
+    startTime
+    endTime
+    version
+    room {
+      id
+    }
+    organiser {
+      id
+    }
+    attendees {
+      person {
+        id
+      }
+    }
+  }
+}
+
+mutation UpdateMeeting($id: ID!, $meeting: MeetingInput!) {
+  updateMeeting(id: $id, meeting: $meeting) {
+    meeting {
+      id
     }
     errors
   }

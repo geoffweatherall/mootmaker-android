@@ -9,11 +9,13 @@ fun fakeIdToken(
     name: String? = "Pat Example",
     personId: String? = "person-1",
     expiresAt: Instant = Instant.parse("2030-01-01T00:00:00Z"),
+    admin: Boolean = false,
 ): String {
     val claims = buildList {
         add("\"email\":\"$email\"")
         name?.let { add("\"name\":\"$it\"") }
         personId?.let { add("\"custom:personId\":\"$it\"") }
+        add("\"custom:class\":\"${if (admin) "admin" else "standard"}\"")
         add("\"exp\":${expiresAt.epochSecond}")
     }.joinToString(",", "{", "}")
     val encoder = Base64.getUrlEncoder().withoutPadding()
