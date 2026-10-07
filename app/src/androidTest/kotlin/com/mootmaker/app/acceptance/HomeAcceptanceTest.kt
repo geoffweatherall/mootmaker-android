@@ -76,9 +76,9 @@ class HomeAcceptanceTest {
         compose.onNodeWithText("Add meeting").assertExists()
     }
 
-    /** Top edge of the one node showing exactly [text]. */
+    /** Top edge of the one node showing exactly [text]. Unclipped: boundsInRoot is empty (0) for a node scrolled off screen. */
     private fun top(text: String): Float =
-        compose.onNode(hasText(text)).fetchSemanticsNode().boundsInRoot.top
+        compose.onNode(hasText(text)).fetchSemanticsNode().positionInRoot.y
 
     private companion object {
         const val NO_PERSON = "Your account hasn't been set up properly — no profile could be found for your sign-in."
