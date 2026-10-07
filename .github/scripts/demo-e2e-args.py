@@ -46,6 +46,8 @@ for source, read in (("mobile-config.json (Android client)", from_mobile_config)
         }
         if any(re.search(r"\s", value) for value in args.values()):
             raise ValueError("a value contains whitespace, which the emulator runner's shell would split")
+        # The demo password is public (the site serves it), but keep it out of the logs anyway.
+        print(f"::add-mask::{args['e2ePassword']}", flush=True)
         print(f"::notice title=e2e config::{ENVIRONMENT} e2e uses {source}", flush=True)
         break
     except Exception as error:  # noqa: BLE001 - try the next source, or skip with a warning
