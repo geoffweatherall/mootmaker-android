@@ -11,6 +11,8 @@ import com.mootmaker.data.api.CalendarRepository
 import com.mootmaker.data.api.CalendarSource
 import com.mootmaker.data.api.HomeRepository
 import com.mootmaker.data.api.HomeSource
+import com.mootmaker.data.api.MeetingFormRepository
+import com.mootmaker.data.api.MeetingFormSource
 import com.mootmaker.data.api.MeetingRepository
 import com.mootmaker.data.api.MeetingSource
 import com.mootmaker.data.auth.AndroidKeystoreCipher
@@ -64,6 +66,8 @@ class AppContainer(
     val availabilitySource: AvailabilitySource = AvailabilityRepository(apollo = ::apolloClient, idToken = session::idToken)
 
     val meetingSource: MeetingSource = MeetingRepository(apollo = ::apolloClient, idToken = session::idToken)
+
+    val meetingFormSource: MeetingFormSource = MeetingFormRepository(apollo = ::apolloClient, idToken = session::idToken)
 
     val calendarSource: CalendarSource = CalendarRepository(apollo = ::apolloClient, idToken = session::idToken)
 
