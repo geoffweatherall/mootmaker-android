@@ -25,7 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-val NO_AVAILABILITY_ACTIONS = AvailabilityActions({}, {}, {}, {}, {}, {}, {})
+val NO_AVAILABILITY_ACTIONS = AvailabilityActions({}, {}, {}, {}, {}, {}, {}, {})
 
 private fun booking(id: String, subject: String, start: String, end: String) =
     Booking(id, subject, "${TODAY}T$start:00", "${TODAY}T$end:00")

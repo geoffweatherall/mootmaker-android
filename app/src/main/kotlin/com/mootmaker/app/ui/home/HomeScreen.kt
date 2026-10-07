@@ -1,6 +1,7 @@
 package com.mootmaker.app.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,7 +58,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Entry points for screens the app doesn't have yet; each opens the webapp (design choice 10). */
+/** What the home screen can do. Add meeting still opens the webapp (design choice 10) until M4. */
 data class HomeActions(
     val onCalendar: () -> Unit,
     val onRoomAvailabilityToday: () -> Unit,
@@ -65,6 +66,7 @@ data class HomeActions(
     val onRetry: () -> Unit,
     val onAbout: () -> Unit,
     val onSignOut: () -> Unit,
+    val onOpenMeeting: (meetingId: String) -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,9 +146,9 @@ private fun Agenda(state: HomeState, fallbackName: String?, actions: HomeActions
                         modifier = Modifier.padding(24.dp),
                     )
                 } else {
-                    AgendaDaySection("Today", agenda.today, data.timeFormat)
+                    AgendaDaySection("Today", agenda.today, data.timeFormat, actions.onOpenMeeting)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    AgendaDaySection("Tomorrow", agenda.tomorrow, data.timeFormat)
+                    AgendaDaySection("Tomorrow", agenda.tomorrow, data.timeFormat, actions.onOpenMeeting)
                 }
             }
         }
@@ -163,7 +165,7 @@ private fun EntryPoint(label: String, icon: ImageVector, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AgendaDaySection(title: String, day: AgendaDay, timeFormat: TimeFormat) {
+private fun AgendaDaySection(title: String, day: AgendaDay, timeFormat: TimeFormat, onOpenMeeting: (String) -> Unit) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -177,17 +179,16 @@ private fun AgendaDaySection(title: String, day: AgendaDay, timeFormat: TimeForm
         if (day.rows.isEmpty()) {
             Text("No meetings", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        day.rows.forEach { AgendaRowItem(it, timeFormat) }
+        day.rows.forEach { AgendaRowItem(it, timeFormat) { onOpenMeeting(it.meetingId) } }
     }
 }
 
-/** Not tappable yet: meeting details arrive in M3. */
 @Composable
-private fun AgendaRowItem(row: AgendaRow, timeFormat: TimeFormat) {
+private fun AgendaRowItem(row: AgendaRow, timeFormat: TimeFormat, onClick: () -> Unit) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
     ) {
         Box(Modifier.size(8.dp).background(roomColor(row.roomColorSlot, dark), CircleShape))
         Spacer(Modifier.width(12.dp))

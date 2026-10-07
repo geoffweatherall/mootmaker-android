@@ -7,6 +7,9 @@ import java.time.format.DateTimeParseException
 /** Mirrors the API's TimeFormat enum. Display only: the API always speaks ISO-8601. */
 enum class TimeFormat { TwentyFourHour, AmPm }
 
+/** Mirrors the API's DateFormat enum. Display only: the API always speaks ISO-8601. */
+enum class DateFormat { Iso, British, Usa }
+
 /** The eight categorical room colours, in the API's RoomColor order. */
 enum class RoomColor { Blue, Orange, Aqua, Yellow, Magenta, Green, Violet, Red }
 
@@ -52,26 +55,31 @@ fun buildAgenda(
     days: List<DayInput>,
     rooms: List<RoomInput>,
 ): Agenda {
+    return Agenda(
+        today = agendaDay(personId, today, days, rooms),
+        tomorrow = agendaDay(personId, today.plusDays(1), days, rooms),
+    )
+}
+
+/** One day's meetings that [personId] organises or attends, sorted by start time. */
+fun agendaDay(personId: String, date: LocalDate, days: List<DayInput>, rooms: List<RoomInput>): AgendaDay {
     val roomsById = rooms.associateBy { it.id }
     val slotByRoomId = roomColorSlots(rooms)
-    fun dayFor(date: LocalDate): AgendaDay {
-        val meetings = days.firstOrNull { it.date == date.toString() }?.meetings.orEmpty()
-        val rows = meetings
-            .filter { it.organiserId == personId || personId in it.attendeeIds }
-            .sortedBy { it.startTime }
-            .map {
-                AgendaRow(
-                    meetingId = it.id,
-                    subject = it.subject,
-                    startTime = it.startTime,
-                    endTime = it.endTime,
-                    roomName = roomsById[it.roomId]?.name.orEmpty(),
-                    roomColorSlot = slotByRoomId[it.roomId] ?: 0,
-                )
-            }
-        return AgendaDay(date, rows)
-    }
-    return Agenda(today = dayFor(today), tomorrow = dayFor(today.plusDays(1)))
+    val meetings = days.firstOrNull { it.date == date.toString() }?.meetings.orEmpty()
+    val rows = meetings
+        .filter { it.organiserId == personId || personId in it.attendeeIds }
+        .sortedBy { it.startTime }
+        .map {
+            AgendaRow(
+                meetingId = it.id,
+                subject = it.subject,
+                startTime = it.startTime,
+                endTime = it.endTime,
+                roomName = roomsById[it.roomId]?.name.orEmpty(),
+                roomColorSlot = slotByRoomId[it.roomId] ?: 0,
+            )
+        }
+    return AgendaDay(date, rows)
 }
 
 /**
@@ -102,5 +110,25 @@ fun formatTime(isoLocalDateTime: String, timeFormat: TimeFormat): String {
             val hour12 = if (time.hour % 12 == 0) 12 else time.hour % 12
             "${hour12.toString().padStart(2, '0')}:$minute $meridiem"
         }
+    }
+}
+
+/**
+ * The date portion of a naive local date-time in the viewer's format, zero-padded in all three
+ * ("2026-10-07", "07/10/2026", "10/07/2026"). Anything unparsable is shown as it came.
+ */
+fun formatDate(isoLocalDateTime: String, dateFormat: DateFormat): String {
+    val date = try {
+        LocalDateTime.parse(isoLocalDateTime).toLocalDate()
+    } catch (_: DateTimeParseException) {
+        return isoLocalDateTime
+    }
+    val year = date.year.toString().padStart(4, '0')
+    val month = date.monthValue.toString().padStart(2, '0')
+    val day = date.dayOfMonth.toString().padStart(2, '0')
+    return when (dateFormat) {
+        DateFormat.Iso -> "$year-$month-$day"
+        DateFormat.British -> "$day/$month/$year"
+        DateFormat.Usa -> "$month/$day/$year"
     }
 }
