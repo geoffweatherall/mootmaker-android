@@ -17,7 +17,7 @@ import java.time.LocalDate
 
 /**
  * The app on a real device (Keystore, Custom Tabs available, real lifecycle) against [FakeBackend].
- * Runs on every push; the same journey against a real Cognito pool is [ProductionDemoE2eTest].
+ * Runs on every push; the same journey against a real Cognito pool is [DemoUserE2eTest].
  */
 class AppFlowInstrumentedTest {
     @get:Rule

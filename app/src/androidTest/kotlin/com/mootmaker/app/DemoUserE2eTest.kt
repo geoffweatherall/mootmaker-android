@@ -18,16 +18,17 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * e2e: real Cognito SRP sign-in and a real GraphQL query, as production's public demo user.
- * Read-only, the same thing anyone does on the website's home page.
+ * e2e: real Cognito SRP sign-in and a real GraphQL query, as an environment's public demo user.
+ * Read-only, the same thing anyone does on the website's home page. Production by default; a
+ * manual pr-checks run can name an ephemeral environment instead.
  *
- * CI reads production's configuration and passes it as instrumentation arguments
- * (.github/scripts/production-demo-args.py). It prefers `mobile-config.json` with the Android
+ * CI reads the environment's configuration and passes it as instrumentation arguments
+ * (.github/scripts/demo-e2e-args.py). It prefers `mobile-config.json` with the Android
  * Cognito client. Until a release publishes that file, it falls back to the webapp's
  * `env-config.js` and signs in through the webapp's client, which also allows SRP. A check-run
  * notice names the source used. Skipped when the arguments are absent.
  */
-class ProductionDemoE2eTest {
+class DemoUserE2eTest {
     @get:Rule
     val compose = createEmptyComposeRule()
 

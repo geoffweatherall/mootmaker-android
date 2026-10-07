@@ -3,6 +3,11 @@ name: pr-checks
 on:
   push:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment for the demo-user e2e test (blank = production), e.g. and-acc-261007-ab12'
+        type: string
+        default: ''
 
 concurrency:
   group: pr-checks-${{ github.ref }}
@@ -60,9 +65,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
-      # Interim e2e: production's public demo user, read-only. See ProductionDemoE2eTest.
-      - name: Read production's demo configuration
-        run: python3 .github/scripts/production-demo-args.py
+      # e2e as the public demo user, read-only. See DemoUserE2eTest.
+      - name: Read the e2e environment's configuration
+        env:
+          E2E_ENVIRONMENT: ${{ inputs.environment }}
+        run: python3 .github/scripts/demo-e2e-args.py
       - name: Instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
