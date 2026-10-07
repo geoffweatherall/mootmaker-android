@@ -91,7 +91,8 @@ class MeetingAcceptanceTest {
     fun aBookingOnARoomCardOpensAMeetingYouHaveNoPartIn() {
         val run = UUID.randomUUID().toString().take(6)
         val admin = Api(Acceptance.admin)
-        val room = admin.createRoom("A-Other $run")
+        // "A-0" sorts before every other case's rooms, so this card is the first with one meeting today.
+        val room = admin.createRoom("A-0Other $run")
         val organiser = admin.createPerson("Guest $run")
         val today = LocalDate.now()
         admin.createMeeting(room, organiser, "Theirs $run", "${today}T13:00:00", "${today}T14:00:00")
@@ -100,7 +101,7 @@ class MeetingAcceptanceTest {
         compose.signIn(Acceptance.admin)
         compose.waitForText("Rooms today")
         compose.onNodeWithText("Rooms today").performClick()
-        compose.waitForText("A-Other $run")
+        compose.waitForText("A-0Other $run")
         compose.onAllNodesWithTextFirst("See today's meetings (1)").performClick()
         compose.waitForText("Theirs $run")
         compose.onNodeWithText("Theirs $run").performClick()
