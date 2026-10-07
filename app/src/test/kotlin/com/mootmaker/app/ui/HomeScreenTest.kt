@@ -23,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.time.LocalDate
 
 val TODAY: LocalDate = LocalDate.of(2026, 10, 7)
-val NO_ACTIONS = HomeActions({}, {}, {}, {}, {}, {})
+val NO_ACTIONS = HomeActions({}, {}, {}, {}, {}, {}, {})
 
 fun row(id: String, subject: String, start: String, end: String, room: String = "Boardroom", slot: Int = 0) =
     AgendaRow(id, subject, "${TODAY}T$start:00", "${TODAY}T$end:00", room, slot)

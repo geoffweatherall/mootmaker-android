@@ -22,6 +22,8 @@ import java.time.LocalDate
 
 data class FakeRoom(val id: String, val name: String, val color: String? = null, val capacity: Int = 6)
 
+data class FakePerson(val id: String, val name: String)
+
 data class FakeMeeting(
     val id: String,
     val subject: String,
@@ -30,6 +32,8 @@ data class FakeMeeting(
     val roomId: String,
     val organiserId: String,
     val attendeeIds: List<String> = emptyList(),
+    /** Response by attendee id; an attendee not listed here has not responded. */
+    val responses: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -52,6 +56,10 @@ class FakeBackend : Interceptor {
     var personId: String? = "person-1"
     var personName = "Pat Example"
     var timeFormat = "TwentyFourHour"
+    var dateFormat = "Iso"
+
+    /** Everyone `workspace.people` lists. The signed-in person ([personId], [personName]) is added to it. */
+    var otherPeople = listOf(FakePerson("person-2", "Sam Other"))
     var rooms = listOf(FakeRoom("room-1", "Boardroom"), FakeRoom("room-2", "Atrium", "Green"))
     var meetings: List<FakeMeeting> = emptyList()
 
@@ -125,11 +133,20 @@ class FakeBackend : Interceptor {
             return respond(chain, 401, """{"errors":[{"errorType":"UnauthorizedException","message":"You are not authorized to make this call."}]}""")
         }
         val dates = (request["variables"]?.jsonObject?.get("dates") as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
-        return respond(chain, 200, homeResponse(dates))
+        val meetingId = request["variables"]?.jsonObject?.get("id")?.jsonPrimitive?.content
+        return respond(chain, 200, homeResponse(dates, meetingId, withMeeting = operation == "MeetingDetails"))
     }
 
-    private fun homeResponse(dates: List<String>): String = buildJsonObject {
+    private val people: List<FakePerson>
+        get() = listOfNotNull(personId?.let { FakePerson(it, personName) }) + otherPeople
+
+    /** One answer shaped for every operation: Apollo reads only the fields each one selected. */
+    private fun homeResponse(dates: List<String>, meetingId: String?, withMeeting: Boolean): String = buildJsonObject {
         putJsonObject("data") {
+            if (withMeeting) {
+                val meeting = meetings.firstOrNull { it.id == meetingId }
+                put("meeting", meeting?.toJson() ?: JsonNull)
+            }
             putJsonObject("workspace") {
                 val id = personId
                 if (id == null) {
@@ -139,8 +156,10 @@ class FakeBackend : Interceptor {
                         put("id", id)
                         put("name", personName)
                         put("timeFormat", timeFormat)
+                        put("dateFormat", dateFormat)
                     }
                 }
+                put("people", buildJsonArray { people.forEach { add(buildJsonObject { put("id", it.id); put("name", it.name) }) } })
                 put(
                     "rooms",
                     buildJsonArray {
@@ -182,13 +201,27 @@ class FakeBackend : Interceptor {
         put("subject", subject)
         put("startTime", startTime)
         put("endTime", endTime)
-        putJsonObject("room") { put("id", roomId) }
-        putJsonObject("organiser") { put("id", organiserId) }
+        putJsonObject("room") {
+            put("id", roomId)
+            put("name", rooms.firstOrNull { it.id == roomId }?.name ?: "Unknown room")
+        }
+        putJsonObject("organiser") { put("id", organiserId); put("name", nameOf(organiserId)) }
         put(
             "attendees",
-            buildJsonArray { attendeeIds.forEach { add(buildJsonObject { putJsonObject("person") { put("id", it) } }) } },
+            buildJsonArray {
+                attendeeIds.forEach { id ->
+                    add(
+                        buildJsonObject {
+                            putJsonObject("person") { put("id", id); put("name", nameOf(id)) }
+                            put("status", responses[id] ?: "NoResponse")
+                        },
+                    )
+                }
+            },
         )
     }
+
+    private fun nameOf(id: String) = people.firstOrNull { it.id == id }?.name ?: "Person $id"
 
     private fun respond(chain: Interceptor.Chain, code: Int, body: String): Response = Response.Builder()
         .request(chain.request())

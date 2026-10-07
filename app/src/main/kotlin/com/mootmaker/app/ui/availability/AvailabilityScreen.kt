@@ -80,6 +80,7 @@ data class AvailabilityActions(
     val onPickDate: (LocalDate) -> Unit,
     val onToggleRoom: (String) -> Unit,
     val onAddMeeting: () -> Unit,
+    val onOpenMeeting: (meetingId: String) -> Unit,
     val onRetry: () -> Unit,
 )
 
@@ -173,13 +174,13 @@ private fun RoomList(state: AvailabilityState, timeFormat: TimeFormat, rooms: Li
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(rooms, key = { it.id }) { room ->
-            RoomCardItem(room, state, timeFormat, dayLabel, expanded = room.id in state.expanded) { actions.onToggleRoom(room.id) }
+            RoomCardItem(room, state, timeFormat, dayLabel, expanded = room.id in state.expanded, onOpenMeeting = actions.onOpenMeeting) { actions.onToggleRoom(room.id) }
         }
     }
 }
 
 @Composable
-private fun RoomCardItem(room: RoomCard, state: AvailabilityState, timeFormat: TimeFormat, dayLabel: String, expanded: Boolean, onToggle: () -> Unit) {
+private fun RoomCardItem(room: RoomCard, state: AvailabilityState, timeFormat: TimeFormat, dayLabel: String, expanded: Boolean, onOpenMeeting: (String) -> Unit, onToggle: () -> Unit) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val color = roomColor(room.colorSlot, dark)
     val status = statusForRoom(room.bookings, state.isToday, state.nowMinutes, timeFormat)
@@ -236,17 +237,16 @@ private fun RoomCardItem(room: RoomCard, state: AvailabilityState, timeFormat: T
                     if (room.bookings.isEmpty()) {
                         Text("No meetings booked for $dayLabel.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    room.bookings.forEach { BookingRow(it, timeFormat) }
+                    room.bookings.forEach { BookingRow(it, timeFormat) { onOpenMeeting(it.id) } }
                 }
             }
         }
     }
 }
 
-/** Not tappable yet: meeting details arrive in M3. */
 @Composable
-private fun BookingRow(booking: Booking, timeFormat: TimeFormat) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+private fun BookingRow(booking: Booking, timeFormat: TimeFormat, onClick: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp)) {
         Text(
             "${formatTime(booking.startTime, timeFormat)}–${formatTime(booking.endTime, timeFormat)}",
             style = MaterialTheme.typography.bodyMedium,

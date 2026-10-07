@@ -1,0 +1,38 @@
+# The meeting details screen's one request. `meeting(id)` is the one lookup that works from a cold
+# link; the rooms ride along only for the room's colour, which depends on its position in the
+# name-sorted room list. Names are selected on the meeting itself, since nothing is cached.
+query MeetingDetails($id: ID!) {
+  meeting(id: $id) {
+    id
+    subject
+    startTime
+    endTime
+    room {
+      id
+      name
+    }
+    organiser {
+      id
+      name
+    }
+    attendees {
+      person {
+        id
+        name
+      }
+      status
+    }
+  }
+  workspace {
+    me {
+      id
+      timeFormat
+      dateFormat
+    }
+    rooms {
+      id
+      name
+      color
+    }
+  }
+}

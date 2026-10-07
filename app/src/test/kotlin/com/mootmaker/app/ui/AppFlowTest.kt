@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import com.mootmaker.app.MainActivity
 import com.mootmaker.app.useFakeBackend
+import com.mootmaker.data.calendar.startOfWorkWeek
 import com.mootmaker.testing.FakeBackend
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -187,5 +188,126 @@ class AppFlowTest {
         waitForText("First: Tomorrow only at 11:00")
         // The new day starts collapsed, and the previous day's meetings are gone.
         assertTrue(compose.onAllNodes(hasText("Atrium chat")).fetchSemanticsNodes().isEmpty())
+    }
+
+    // Use cases D.22 (rows link to details), H.69 and H.71 through the real app wiring.
+    @Test
+    fun anAgendaRowOpensItsMeetingDetailsAndBackReturnsHome() {
+        val today = LocalDate.now()
+        backend.meetings = listOf(
+            FakeBackend.meeting("m1", "Stand-up", today, 9, organiserId = "person-2")
+                .copy(attendeeIds = listOf("person-1"), responses = mapOf("person-1" to "Going")),
+        )
+        useFakeBackend(backend)
+        launch()
+        waitForText("demo@mootmaker.com")
+        signInButton().performClick()
+        waitForText("Stand-up")
+
+        compose.onNodeWithText("Stand-up").performClick()
+
+        waitForText("Attendees · 1")
+        compose.onNodeWithText("Sam Other").assertIsDisplayed()
+        compose.onNodeWithText("You").assertIsDisplayed()
+        compose.onNodeWithText("09:00–10:00").assertIsDisplayed()
+        compose.onNodeWithText("$today").assertIsDisplayed()
+        assertTrue("graphql MeetingDetails" in backend.requests)
+
+        compose.onNodeWithContentDescription("Back").performClick()
+        waitForText("Rooms today")
+    }
+
+    // Use case H.73: the lookup answers null for an id that doesn't exist.
+    @Test
+    fun aMeetingThatNoLongerExistsSaysSo() {
+        val today = LocalDate.now()
+        backend.meetings = listOf(FakeBackend.meeting("m1", "Stand-up", today, 9))
+        useFakeBackend(backend)
+        launch()
+        waitForText("demo@mootmaker.com")
+        signInButton().performClick()
+        waitForText("Stand-up")
+        // Cancelled by someone else between the list and the tap.
+        backend.meetings = emptyList()
+
+        compose.onNodeWithText("Stand-up").performClick()
+
+        waitForText("Meeting not found.")
+    }
+
+    // Use cases E.32 (navigation half) and H.68: a booking on a room card opens its details.
+    @Test
+    fun aBookingOnTheAvailabilityScreenOpensItsMeetingDetails() {
+        val today = LocalDate.now()
+        backend.meetings = listOf(FakeBackend.meeting("a1", "Board sync", today, 9, roomId = "room-1"))
+        useFakeBackend(backend)
+        launch()
+        waitForText("demo@mootmaker.com")
+        signInButton().performClick()
+        waitForText("Rooms today")
+        compose.onNodeWithText("Rooms today").performClick()
+        waitForText("Atrium")
+        compose.onAllNodes(hasText("See today's meetings (1)")).onFirst().performClick()
+        waitForText("Board sync")
+
+        compose.onNodeWithText("Board sync").performClick()
+
+        waitForText("Attendees · 0")
+        compose.onNodeWithText("Pat Example").assertIsDisplayed()
+    }
+
+    // Use cases G.59, G.60 and G.65 through the real app wiring: your own week from home, another
+    // person's from the selector, and a meeting row opening its details.
+    @Test
+    fun theCalendarShowsYourWeekAnotherPersonsAndOpensAMeeting() {
+        val monday = startOfWorkWeek(LocalDate.now())
+        backend.meetings = listOf(
+            FakeBackend.meeting("c1", "Mine on Monday", monday, 9),
+            FakeBackend.meeting("c2", "Sam's on Tuesday", monday.plusDays(1), 10, organiserId = "person-2"),
+        )
+        useFakeBackend(backend)
+        launch()
+        waitForText("demo@mootmaker.com")
+        signInButton().performClick()
+        waitForText("Calendar")
+        compose.onNodeWithText("Calendar").performClick()
+
+        waitForText("Mine on Monday")
+        assertTrue(compose.onAllNodes(hasText("Sam's on Tuesday")).fetchSemanticsNodes().isEmpty())
+        assertTrue("graphql PersonCalendar" in backend.requests)
+
+        compose.onNodeWithText("Pat Example").performClick()
+        compose.onNodeWithText("Sam Other").performClick()
+        waitForText("Sam's on Tuesday")
+        assertTrue(compose.onAllNodes(hasText("Mine on Monday")).fetchSemanticsNodes().isEmpty())
+
+        compose.onNodeWithText("Sam's on Tuesday").performClick()
+        waitForText("Attendees · 0")
+        compose.onNodeWithText("Sam Other").assertIsDisplayed()
+    }
+
+    // Use case G.62: Previous and Next week load those weeks.
+    @Test
+    fun thePreviousAndNextWeekButtonsLoadThoseWeeks() {
+        val monday = startOfWorkWeek(LocalDate.now())
+        backend.meetings = listOf(
+            FakeBackend.meeting("c1", "Next week's", monday.plusWeeks(1), 9),
+            FakeBackend.meeting("c2", "Last week's", monday.minusWeeks(1), 9),
+        )
+        useFakeBackend(backend)
+        launch()
+        waitForText("demo@mootmaker.com")
+        signInButton().performClick()
+        waitForText("Calendar")
+        compose.onNodeWithText("Calendar").performClick()
+        waitForText("This week")
+
+        compose.onNodeWithContentDescription("Next week").performClick()
+        waitForText("Next week's")
+        compose.onNodeWithContentDescription("Previous week").performClick()
+        compose.onNodeWithContentDescription("Previous week").performClick()
+        waitForText("Last week's")
+        compose.onNodeWithText("This week").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Last week's")).fetchSemanticsNodes().isEmpty() }
     }
 }

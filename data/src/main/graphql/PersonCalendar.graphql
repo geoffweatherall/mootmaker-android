@@ -1,0 +1,44 @@
+# A person's calendar for one working week: everyone (for the person selector), the rooms (for
+# colours), the week's days and the window the server allows navigation in. Meetings are filtered
+# to the person on the device, as the webapp does.
+query PersonCalendar($dates: [String!]) {
+  workspace(dates: $dates) {
+    me {
+      id
+      timeFormat
+    }
+    people {
+      id
+      name
+    }
+    rooms {
+      id
+      name
+      color
+    }
+    days {
+      date
+      meetings {
+        id
+        subject
+        startTime
+        endTime
+        room {
+          id
+        }
+        organiser {
+          id
+        }
+        attendees {
+          person {
+            id
+          }
+        }
+      }
+    }
+    boundaries {
+      earliestRetainedDate
+      latestBookableDate
+    }
+  }
+}

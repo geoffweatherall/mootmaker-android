@@ -25,18 +25,26 @@ import com.mootmaker.app.AppContainer
 import com.mootmaker.app.BuildConfig
 import com.mootmaker.app.WebLinks
 import com.mootmaker.app.openInCustomTab
+import com.mootmaker.app.shareLink
 import com.mootmaker.app.ui.about.AboutScreen
 import com.mootmaker.app.ui.availability.AvailabilityActions
 import com.mootmaker.app.ui.availability.AvailabilityScreen
 import com.mootmaker.app.ui.availability.AvailabilityViewModel
+import com.mootmaker.app.ui.calendar.CalendarActions
+import com.mootmaker.app.ui.calendar.CalendarScreen
+import com.mootmaker.app.ui.calendar.CalendarViewModel
 import com.mootmaker.app.ui.home.HomeActions
 import com.mootmaker.app.ui.home.HomeScreen
 import com.mootmaker.app.ui.home.HomeViewModel
+import com.mootmaker.app.ui.meeting.MeetingDetailsActions
+import com.mootmaker.app.ui.meeting.MeetingDetailsScreen
+import com.mootmaker.app.ui.meeting.MeetingDetailsViewModel
 import com.mootmaker.app.ui.signin.SignInConfig
 import com.mootmaker.app.ui.signin.SignInScreen
 import com.mootmaker.app.ui.signin.SignInViewModel
 import com.mootmaker.data.auth.ConfigState
 import com.mootmaker.data.auth.SessionState
+import com.mootmaker.data.meeting.meetingShareUrl
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -46,7 +54,12 @@ private object Routes {
     const val ABOUT = "about"
     const val AVAILABILITY = "availability/{date}"
 
+    const val MEETING = "meeting/{id}"
+    const val CALENDAR = "calendar/{personId}"
+
     fun availability(date: LocalDate) = "availability/$date"
+    fun meeting(id: String) = "meeting/$id"
+    fun calendar(personId: String) = "calendar/$personId"
 }
 
 /**
@@ -112,12 +125,13 @@ fun MootmakerApp(container: AppContainer) {
                 state = state,
                 fallbackName = claims?.name ?: claims?.email,
                 actions = HomeActions(
-                    onCalendar = { claims?.personId?.let { open(links.calendar(it)) } },
+                    onCalendar = { claims?.personId?.let { navController.navigate(Routes.calendar(it)) } },
                     onRoomAvailabilityToday = { navController.navigate(Routes.availability(state.today)) },
                     onAddMeeting = { open(links.addMeeting()) },
                     onRetry = viewModel::refresh,
                     onAbout = { navController.navigate(Routes.ABOUT) },
                     onSignOut = { scope.launch { session.signOut() } },
+                    onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                 ),
             )
         }
@@ -138,6 +152,46 @@ fun MootmakerApp(container: AppContainer) {
                     onPickDate = viewModel::goTo,
                     onToggleRoom = viewModel::toggleExpanded,
                     onAddMeeting = { open(links.addMeeting()) },
+                    onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
+                    onRetry = viewModel::refresh,
+                ),
+            )
+        }
+        composable(Routes.MEETING, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+            val meetingId = entry.arguments?.getString("id").orEmpty()
+            val viewModel = viewModel { MeetingDetailsViewModel(container.meetingSource, meetingId) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(viewModel) {
+                viewModel.refresh()
+                onPauseOrDispose { }
+            }
+            MeetingDetailsScreen(
+                state = state,
+                actions = MeetingDetailsActions(
+                    onBack = { navController.popBackStack() },
+                    onShare = { shareLink(context, it.subject, meetingShareUrl(configState.environment.siteUrl, it.id)) },
+                    onOpenCalendar = { navController.navigate(Routes.calendar(it)) },
+                    onRetry = viewModel::refresh,
+                ),
+            )
+        }
+        composable(Routes.CALENDAR, arguments = listOf(navArgument("personId") { type = NavType.StringType })) { entry ->
+            val personId = entry.arguments?.getString("personId").orEmpty()
+            val viewModel = viewModel { CalendarViewModel(container.calendarSource, personId) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(viewModel) {
+                viewModel.refresh()
+                onPauseOrDispose { }
+            }
+            CalendarScreen(
+                state = state,
+                actions = CalendarActions(
+                    onBack = { navController.popBackStack() },
+                    onPreviousWeek = viewModel::previousWeek,
+                    onNextWeek = viewModel::nextWeek,
+                    onThisWeek = viewModel::thisWeek,
+                    onSelectPerson = viewModel::selectPerson,
+                    onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                     onRetry = viewModel::refresh,
                 ),
             )

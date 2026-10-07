@@ -3,6 +3,8 @@ package com.mootmaker.app.ui
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mootmaker.app.ui.calendar.CalendarScreen
+import com.mootmaker.app.ui.meeting.MeetingDetailsScreen
 import com.mootmaker.app.ui.availability.AvailabilityState
 import com.mootmaker.app.ui.availability.AvailabilityScreen
 import com.mootmaker.app.ui.home.HomeScreen
@@ -84,5 +86,25 @@ class ScreenshotTest {
     @Test
     fun availabilityDark() = capture("availability-dark", dark = true) {
         AvailabilityScreen(SAMPLE_AVAILABILITY, NO_AVAILABILITY_ACTIONS)
+    }
+
+    @Test
+    fun meetingDetails() = capture("meeting-details") {
+        MeetingDetailsScreen(meetingState(SAMPLE_MEETING), NO_MEETING_ACTIONS)
+    }
+
+    @Test
+    fun meetingDetailsDark() = capture("meeting-details-dark", dark = true) {
+        MeetingDetailsScreen(meetingState(SAMPLE_MEETING), NO_MEETING_ACTIONS)
+    }
+
+    @Test
+    fun calendar() = capture("calendar") {
+        CalendarScreen(SAMPLE_CALENDAR, NO_CALENDAR_ACTIONS)
+    }
+
+    @Test
+    fun calendarDark() = capture("calendar-dark", dark = true) {
+        CalendarScreen(SAMPLE_CALENDAR, NO_CALENDAR_ACTIONS)
     }
 }

@@ -26,6 +26,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -121,6 +122,19 @@ class Api(private val account: Acceptance.Account) {
     fun myPersonId(): String =
         query("query { workspace { me { id } } }")["workspace"]!!.jsonObject["me"]!!.jsonObject.string("id")
 
+    fun myName(): String =
+        query("query { workspace { me { name } } }")["workspace"]!!.jsonObject["me"]!!.jsonObject.string("name")
+
+    /** A guest Person (admin only): someone to organise or attend meetings without signing in. */
+    fun createPerson(name: String): String {
+        val result = query(
+            "mutation(\$name: String!) { createPerson(name: \$name) { person { id } errors } }",
+            buildJsonObject { put("name", name) },
+        )["createPerson"]!!.jsonObject
+        checkNoErrors(result)
+        return result["person"]!!.jsonObject.string("id")
+    }
+
     fun createRoom(name: String): String {
         val result = query(
             "mutation(\$room: RoomInput!) { createRoom(room: \$room) { room { id } errors } }",
@@ -130,11 +144,18 @@ class Api(private val account: Acceptance.Account) {
         return result["room"]!!.jsonObject.string("id")
     }
 
-    fun createMeeting(roomId: String, organiserId: String, subject: String, start: String, end: String) {
+    fun createMeeting(
+        roomId: String,
+        organiserId: String,
+        subject: String,
+        start: String,
+        end: String,
+        attendeeIds: List<String> = emptyList(),
+    ): String {
         val meeting = buildJsonObject {
             put("roomId", roomId)
             put("organiserId", organiserId)
-            put("attendeeIds", JsonArray(emptyList()))
+            put("attendeeIds", JsonArray(attendeeIds.map { JsonPrimitive(it) }))
             put("subject", subject)
             put("startTime", start)
             put("endTime", end)
@@ -144,6 +165,7 @@ class Api(private val account: Acceptance.Account) {
             buildJsonObject { put("meeting", meeting) },
         )["createMeeting"]!!.jsonObject
         checkNoErrors(result)
+        return result["meeting"]!!.jsonObject.string("id")
     }
 
     private fun checkNoErrors(result: JsonObject) {
