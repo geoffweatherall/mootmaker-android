@@ -46,7 +46,8 @@ object EmailHelper {
     private fun get(path: String): Pair<Int, JsonObject> = Socket().use { socket ->
         socket.connect(InetSocketAddress("127.0.0.1", PORT), 5_000)
         socket.soTimeout = 15_000
-        socket.getOutputStream().write("GET $path HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".toByteArray())
+        // HTTP/1.0, so the reply is a plain body read to the end, never chunked.
+        socket.getOutputStream().write("GET $path HTTP/1.0\r\nHost: localhost\r\n\r\n".toByteArray())
         val response = socket.getInputStream().readBytes().toString(Charsets.UTF_8)
         val status = response.substringAfter(' ').substringBefore(' ').toInt()
         status to Json.parseToJsonElement(response.substringAfter("\r\n\r\n")).jsonObject

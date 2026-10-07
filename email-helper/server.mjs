@@ -31,8 +31,10 @@ function startWait(email) {
 }
 
 function send(response, status, body) {
-  response.writeHead(status, { 'Content-Type': 'application/json', Connection: 'close' })
-  response.end(JSON.stringify(body))
+  // A Content-Length, so the body is never chunked: the device test reads it over a bare socket.
+  const text = JSON.stringify(body)
+  response.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(text), Connection: 'close' })
+  response.end(text)
 }
 
 http
