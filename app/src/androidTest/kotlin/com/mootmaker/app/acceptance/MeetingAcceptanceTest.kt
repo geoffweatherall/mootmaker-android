@@ -60,7 +60,8 @@ class MeetingAcceptanceTest {
         assertTrue(compose.shown("You"))
 
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.waitForText("Rooms today")
+        // Home keeps the scroll position it was left at, so scroll back up to its entry points.
+        compose.scrollHomeTo(hasText("Rooms today"))
     }
 
     /** H.69: a meeting you attend but did not organise, seen as that attendee. */

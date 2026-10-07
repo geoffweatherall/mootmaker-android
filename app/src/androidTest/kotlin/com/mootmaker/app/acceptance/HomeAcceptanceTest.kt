@@ -47,9 +47,10 @@ class HomeAcceptanceTest {
 
         scenario = Acceptance.launchApp()
         compose.signIn(Acceptance.admin)
-        compose.scrollHomeTo(hasText("Earlier today $run"))
-
+        // The entry points are at the top, so check them before scrolling down to the agenda.
+        compose.waitForText("Needs your response")
         listOf("Calendar", "Rooms today", "Add meeting").forEach { compose.onNodeWithText(it).assertExists() }
+        compose.scrollHomeTo(hasText("Earlier today $run"))
         val order = listOf("Today", "Earlier today $run", "Later today $run", "Tomorrow", "Tomorrow $run").map { top(it) }
         assertTrue("Agenda out of order: $order", order.zipWithNext().all { (a, b) -> a < b })
     }
