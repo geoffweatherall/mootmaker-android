@@ -1,0 +1,28 @@
+# Whole days of meetings for the store: ids only for rooms, organisers and attendees, because names
+# come from the reference data. Returns a day for every date asked for, empty or not.
+query Days($dates: [String!]) {
+  workspace(dates: $dates) {
+    days {
+      date
+      meetings {
+        id
+        subject
+        startTime
+        endTime
+        version
+        room {
+          id
+        }
+        organiser {
+          id
+        }
+        attendees {
+          person {
+            id
+          }
+          status
+        }
+      }
+    }
+  }
+}
