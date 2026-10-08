@@ -1,0 +1,28 @@
+# The reference data every screen shares and nothing broadcasts: who you are, everyone, every room
+# and the window the server allows. No dates, so no days are fetched.
+query Reference {
+  workspace {
+    me {
+      id
+      name
+      avatarUrl
+      timeFormat
+      dateFormat
+    }
+    people {
+      id
+      name
+      avatarUrl
+    }
+    rooms {
+      id
+      name
+      capacity
+      color
+    }
+    boundaries {
+      earliestRetainedDate
+      latestBookableDate
+    }
+  }
+}

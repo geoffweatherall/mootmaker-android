@@ -1,0 +1,23 @@
+# One meeting by id, in the same shape Days holds it, for a cold link to a meeting outside the
+# cached days. Null for an unknown id or one aged out of retention.
+query MeetingById($id: ID!) {
+  meeting(id: $id) {
+    id
+    subject
+    startTime
+    endTime
+    version
+    room {
+      id
+    }
+    organiser {
+      id
+    }
+    attendees {
+      person {
+        id
+      }
+      status
+    }
+  }
+}
