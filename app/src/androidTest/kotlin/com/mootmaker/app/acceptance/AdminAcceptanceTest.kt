@@ -66,10 +66,20 @@ class AdminAcceptanceTest {
         compose.waitForText("Settings")
     }
 
+    /**
+     * Opens Rooms or Persons from Home's overflow menu, then waits for the menu to be gone and the list
+     * to have loaded before anything is touched. The menu is a focusable popup with an exit animation:
+     * input sent while it is still closing goes to the wrong window, so a tap "fails to inject" and
+     * typing "fails to perform text input".
+     */
     private fun openAdmin(screen: String) {
         openMenu(Acceptance.admin)
         compose.onNodeWithText(screen).performClick()
         compose.waitForText(if (screen == "Rooms") "Manage the rooms available for booking." else "Manage the people who can be booked into meetings.")
+        compose.waitUntil(30_000) { !compose.shown("Sign out") }
+        val add = if (screen == "Rooms") "Add room" else "Add person"
+        compose.waitUntil(30_000) { compose.onAllNodes(hasContentDescription(add)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
     }
 
     /** The row control for [description] ("Edit X", "Remove X"), scrolled into view in the list first. */
