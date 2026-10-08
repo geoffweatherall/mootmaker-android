@@ -48,26 +48,6 @@ class LiveUpdatesAcceptanceTest {
         compose.waitUntil(30_000) { compose.onAllNodes(hasText("Attendees", substring = true)).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    /**
-     * Waits until a change made elsewhere reaches the open screen, so the live channel is known to
-     * be delivering before the change a case measures. The app subscribes at sign-in and refetches
-     * once AppSync acknowledges, but a change made in the moments after that acknowledgement can
-     * arrive neither way (a release's M.111 run once saw nothing for 30 seconds). [rename] renames the
-     * open meeting through the API; it is called again, with a new name, every ten seconds until one
-     * shows.
-     */
-    private fun untilLive(rename: (String) -> Unit) {
-        val deadline = System.currentTimeMillis() + 60_000
-        var attempt = 0
-        while (true) {
-            val name = "Live check ${++attempt} ${UUID.randomUUID().toString().take(4)}"
-            rename(name)
-            val shown = runCatching { compose.waitUntil(10_000) { compose.shown(name) } }.isSuccess
-            if (shown) return
-            check(System.currentTimeMillis() < deadline) { "No change reached the open screen in 60s; on screen: ${compose.screenText()}" }
-        }
-    }
-
     /** A meeting booked by another client appears on an open home screen. */
     @Test
     fun aMeetingBookedByAnotherClientAppearsOnHome() {
@@ -115,7 +95,7 @@ class LiveUpdatesAcceptanceTest {
         )
         openFromHome(Acceptance.admin, "Awaiting $run")
         compose.waitForText("No response")
-        untilLive {
+        compose.untilLive {
             admin.updateMeeting(meeting, room, admin.myPersonId(), it, "${today}T08:00:00", "${today}T09:00:00", listOf(standard.myPersonId()))
         }
 
