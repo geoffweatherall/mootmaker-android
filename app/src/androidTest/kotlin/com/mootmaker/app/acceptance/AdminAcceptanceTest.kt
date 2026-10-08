@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -208,7 +209,7 @@ class AdminAcceptanceTest {
         compose.scrollHomeTo(hasText("· $name renamed", substring = true))
         assertFalse(compose.onAllNodes(hasText("· $name", substring = true) and !hasText("renamed", substring = true)).fetchSemanticsNodes().isNotEmpty())
         // Back up to the top of home's lazy list, where the agenda scroll left Rooms today uncomposed.
-        compose.scrollHomeTo(hasText("Rooms today") and hasClickAction())
+        compose.scrollClearOfTheBottom(hasScrollAction(), hasText("Rooms today") and hasClickAction())
         compose.onNode(hasText("Rooms today") and hasClickAction()).performClick()
         compose.waitForText("Room availability")
         compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasText("$name renamed"))
