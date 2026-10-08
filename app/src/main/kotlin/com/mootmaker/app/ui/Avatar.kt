@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,9 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -48,7 +51,12 @@ fun Avatar(name: String, avatarUrl: String?, size: Dp = 28.dp, textStyle: TextSt
         contentAlignment = Alignment.Center,
     ) {
         if (!loaded) {
-            Text(initials(name), style = textStyle, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            // The initials belong to the fixed-size circle, so they don't grow with the font size and
+            // spill out of it; the name itself is read out from the content description.
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
+                Text(initials(name), style = textStyle, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
         }
         if (avatarUrl != null) {
             AsyncImage(

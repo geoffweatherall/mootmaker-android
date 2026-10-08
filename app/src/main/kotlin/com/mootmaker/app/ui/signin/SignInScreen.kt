@@ -56,6 +56,7 @@ fun SignInScreen(
     onCreateAccount: () -> Unit,
     onForgotPassword: () -> Unit,
     onAbout: () -> Unit,
+    sessionExpired: Boolean = false,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -73,7 +74,7 @@ fun SignInScreen(
                 Spacer(Modifier.height(24.dp))
                 when (config) {
                     is SignInConfig.Failed -> ConfigFailed(config.environmentName, onRetryConfig)
-                    else -> Form(state, config, onEmailChange, onPasswordChange, onSubmit)
+                    else -> Form(state, config, sessionExpired, onEmailChange, onPasswordChange, onSubmit)
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,6 +94,7 @@ fun SignInScreen(
 private fun Form(
     state: SignInState,
     config: SignInConfig,
+    sessionExpired: Boolean,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit,
@@ -105,6 +107,13 @@ private fun Form(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (sessionExpired) {
+                Text(
+                    "Your session has expired. Sign in again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
             if (config is SignInConfig.Ready && config.hasDemoUser) {
                 Text(
                     "The demo account is filled in. Tap Sign in to look around.",

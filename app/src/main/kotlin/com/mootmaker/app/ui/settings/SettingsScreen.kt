@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.settings
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,7 +83,7 @@ fun SettingsScreen(state: SettingsState, actions: SettingsActions) {
                     Text(state.loadError, color = MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick = actions.onRetry) { Text("Try again") }
                 }
-                !state.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                !state.loaded -> FirstLoad()
                 else -> Sections(state, actions)
             }
         }

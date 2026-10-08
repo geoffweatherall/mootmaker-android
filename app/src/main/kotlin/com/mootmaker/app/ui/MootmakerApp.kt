@@ -109,6 +109,7 @@ fun MootmakerApp(container: AppContainer) {
     val session = container.session
     val sessionState by session.state.collectAsStateWithLifecycle()
     val configState by session.config.collectAsStateWithLifecycle()
+    val sessionExpired by session.expired.collectAsStateWithLifecycle()
 
     if (sessionState == SessionState.Starting) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -154,6 +155,7 @@ fun MootmakerApp(container: AppContainer) {
                 onCreateAccount = { navController.navigate(Routes.SIGN_UP) },
                 onForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) },
                 onAbout = { navController.navigate(Routes.ABOUT) },
+                sessionExpired = sessionExpired,
             )
         }
         // Both finish by signing in, and the session change then replaces the whole back stack with home.

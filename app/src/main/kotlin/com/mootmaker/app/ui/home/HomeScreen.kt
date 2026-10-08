@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.home
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -116,7 +118,7 @@ fun HomeScreen(state: HomeState, fallbackName: String?, actions: HomeActions) {
             }
             when {
                 state.data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
-                state.data == null -> Box(Modifier.fillMaxSize()) // First load: the bar or nothing, briefly.
+                state.data == null -> FirstLoad()
                 state.data.agenda == null -> NoLinkedPerson(state, actions)
                 else -> Agenda(state, fallbackName, actions)
             }
@@ -187,7 +189,8 @@ private fun Agenda(state: HomeState, fallbackName: String?, actions: HomeActions
 private fun LazyListScope.needsResponseSection(state: HomeState, data: HomeData, actions: HomeActions) {
     val range = formatRangeLabel(state.today, data.windowEnd)
     item {
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Wraps: at a large font size the date range moves under the heading instead of squeezing beside it.
+        FlowRow(itemVerticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Needs your response", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (data.needsResponse.isNotEmpty()) {
                 Text("${data.needsResponse.size}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)

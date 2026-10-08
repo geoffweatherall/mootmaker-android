@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.availability
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -107,11 +108,11 @@ fun AvailabilityScreen(state: AvailabilityState, actions: AvailabilityActions) {
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             DayNavigator(state, actions, onPick = { picking = true })
-            if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.loading && state.data != null) LinearProgressIndicator(Modifier.fillMaxWidth())
             val data = state.data
             when {
                 data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
-                data == null -> Box(Modifier.fillMaxSize())
+                data == null -> FirstLoad()
                 data.rooms.isEmpty() -> Text(
                     "No rooms exist yet.",
                     style = MaterialTheme.typography.bodyLarge,

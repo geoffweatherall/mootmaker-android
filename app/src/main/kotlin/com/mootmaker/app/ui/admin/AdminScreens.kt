@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.admin
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,7 +94,7 @@ fun RoomsScreen(state: RoomsState, actions: RoomsActions) {
     ) {
         when {
             state.loadError != null && !state.loaded -> LoadFailed(state.loadError, actions.onRetry)
-            !state.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            !state.loaded -> FirstLoad()
             state.rooms.isEmpty() -> Empty("No rooms exist yet.")
             else -> {
                 val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -220,7 +221,7 @@ fun PersonsScreen(state: PersonsState, actions: PersonsActions) {
     ) {
         when {
             state.loadError != null && !state.loaded -> LoadFailed(state.loadError, actions.onRetry)
-            !state.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            !state.loaded -> FirstLoad()
             state.people.isEmpty() -> Empty("No people exist yet.")
             else -> {
                 OutlinedTextField(

@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.meeting
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -100,7 +101,7 @@ fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActi
             if (state.loading && state.data != null) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 state.data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
-                state.data == null -> Box(Modifier.fillMaxSize())
+                state.data == null -> FirstLoad()
                 meeting == null -> Text(
                     "Meeting not found.",
                     style = MaterialTheme.typography.bodyLarge,
