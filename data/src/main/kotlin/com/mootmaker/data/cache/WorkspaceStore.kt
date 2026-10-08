@@ -101,6 +101,8 @@ class WorkspaceStore(
         val ref: Record<Reference> = Record(),
         val days: Map<LocalDate, Record<CachedDay>> = emptyMap(),
         val byId: Map<String, Record<CachedMeeting?>> = emptyMap(),
+        /** The last answer each watched meeting had, kept on screen while it is looked up again. */
+        val lastSeen: Map<String, Answer> = emptyMap(),
     )
 
     private val lock = Any()
@@ -221,6 +223,7 @@ class WorkspaceStore(
     private fun change(mutation: () -> Unit) {
         val launches = synchronized(lock) {
             mutation()
+            rememberMeetings()
             touchWatched()
             val launches = planFetches()
             prune()
@@ -349,7 +352,8 @@ class WorkspaceStore(
             val day = snapshot.days[meeting.date] ?: return@filterNot false
             day.known && day.seq > answer.seq && day.value?.meetings?.none { it.id == id } == true
         }
-        return Resolution(trusted = standing.maxByOrNull { it.seq }, shown = answers.maxByOrNull { it.seq })
+        val trusted = standing.maxByOrNull { it.seq }
+        return Resolution(trusted = trusted, shown = trusted ?: answers.maxByOrNull { it.seq } ?: snapshot.lastSeen[id])
     }
 
     private fun meetingView(snapshot: Snapshot, id: String): MeetingView {
@@ -374,27 +378,30 @@ class WorkspaceStore(
             meetingWatchers.keys.any { id -> resolve(snap, id).let { it.trusted ?: it.shown }?.dayDate == key.date }
     }
 
+    /** Remembers each watched meeting's current answer, and forgets those no longer watched. */
+    private fun rememberMeetings() {
+        snap = snap.copy(
+            lastSeen = meetingWatchers.keys.associateWith { id -> resolve(snap, id).trusted ?: snap.lastSeen[id] }
+                .filterValues { it != null }.mapValues { it.value!! },
+        )
+    }
+
     private fun touchWatched() {
         val at = now()
         snap = snap.copy(
-            days = snap.days.mapValues { (date, record) -> if (isWatched(Key.Day(date))) record.copy(lastUsed = at) else record },
             byId = snap.byId.mapValues { (id, record) -> if (isWatched(Key.ById(id))) record.copy(lastUsed = at) else record },
         )
     }
 
     /**
-     * Keeps memory bounded: unwatched days more than [DAYS_AROUND_TODAY] days from today go first,
-     * then the least recently used unwatched days beyond [MAX_DAYS], and the least recently used
-     * unwatched lookups beyond [MAX_LOOKUPS]. Nothing watched or in flight is ever dropped.
+     * Keeps memory bounded: unwatched days more than [DAYS_AROUND_TODAY] days from today are dropped,
+     * so at most 121 unwatched days are ever held, and the least recently used unwatched lookups
+     * beyond [MAX_LOOKUPS]. Nothing watched or in flight is ever dropped.
      */
     private fun prune() {
         val day0 = today()
-        val droppable = snap.days.filter { (date, record) -> !record.fetching && !isWatched(Key.Day(date)) }
-        val far = droppable.keys.filter { kotlin.math.abs(ChronoUnit.DAYS.between(day0, it)) > DAYS_AROUND_TODAY }.toSet()
-        var days = snap.days - far
-        val excess = days.size - MAX_DAYS
-        if (excess > 0) {
-            days = days - droppable.filterKeys { it !in far }.entries.sortedBy { it.value.lastUsed }.take(excess).map { it.key }.toSet()
+        val days = snap.days.filterNot { (date, record) ->
+            !record.fetching && !isWatched(Key.Day(date)) && kotlin.math.abs(ChronoUnit.DAYS.between(day0, date)) > DAYS_AROUND_TODAY
         }
         var byId = snap.byId
         val excessLookups = byId.size - MAX_LOOKUPS
@@ -413,7 +420,6 @@ class WorkspaceStore(
 
     companion object {
         const val DAYS_AROUND_TODAY = 60L
-        const val MAX_DAYS = 200
         const val MAX_LOOKUPS = 50
 
         /** How old what a screen shows may be before a resume refetches it: the safety net. */
