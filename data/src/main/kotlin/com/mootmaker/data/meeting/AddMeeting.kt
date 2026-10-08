@@ -125,10 +125,43 @@ fun defaultMeetingTimes(now: LocalTime): DefaultMeetingTimes {
     return DefaultMeetingTimes(minutesToTime(start), minutesToTime(end))
 }
 
-/** Every start or end the form offers: all 96 quarter hours of a day, so no other minute can be chosen. */
+/** Every start or end the form can book: all 96 quarter hours of a day (the dial rounds to one, F.41). */
 val quarterHours: List<LocalTime> = (0 until 24 * 60 step QUARTER).map(::minutesToTime)
 
 private fun minutesToTime(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60)
+
+// --- The time dial ------------------------------------------------------------------------------
+// Material3's clock dial offers every minute (a drag) or every fifth one (a tap), and has no setting
+// for a 15-minute step. The form corrects whatever the dial reads to the nearest quarter, so the time
+// it books is always one the API accepts (issue #28, option 2).
+
+/**
+ * The quarter hour nearest [minute] (0 to 59), as a minute: 0, 15, 30 or 45. Halfway rounds up, and
+ * 53 to 59 round up to 0, the top of the same hour: the dial changes only the minute, never the hour,
+ * so a correction can't move the meeting to another hour or across midnight.
+ */
+fun nearestQuarterMinute(minute: Int): Int {
+    require(minute in 0..59) { "minute $minute is not 0 to 59" }
+    return (minute * 2 + QUARTER) / (QUARTER * 2) * QUARTER % 60
+}
+
+/** The time a dial reading of [hour] (0 to 23) and [minute] books: the same hour, the nearest quarter. */
+fun dialTime(hour: Int, minute: Int): LocalTime = LocalTime.of(hour, nearestQuarterMinute(minute))
+
+/** Whether the dial shows 24 hours (two rings) or 12 with AM and PM, as the form shows times. */
+fun dialIs24Hour(timeFormat: TimeFormat): Boolean = timeFormat == TimeFormat.TwentyFourHour
+
+/** [hour] (0 to 23) as a 12-hour clock face reads it: 12, then 1 to 11, morning and afternoon alike. */
+fun twelveHourClockHour(hour: Int): Int {
+    require(hour in 0..23) { "hour $hour is not 0 to 23" }
+    return if (hour % 12 == 0) 12 else hour % 12
+}
+
+/** The hour of the day (0 to 23) that a 12-hour [clockHour] (1 to 12) means in the morning or [afternoon]. */
+fun hourOfDay(clockHour: Int, afternoon: Boolean): Int {
+    require(clockHour in 1..12) { "clock hour $clockHour is not 1 to 12" }
+    return clockHour % 12 + if (afternoon) 12 else 0
+}
 
 private val localDateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 

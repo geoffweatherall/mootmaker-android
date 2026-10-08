@@ -1,6 +1,12 @@
 package com.mootmaker.app.ui
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -9,13 +15,18 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import com.mootmaker.app.MainActivity
 import com.mootmaker.app.useFakeBackend
 import com.mootmaker.testing.FakeBackend
 import com.mootmaker.testing.FakeRoom
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -24,6 +35,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.time.LocalDate
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** Use cases F.38 to F.56 through the real app wiring, against [FakeBackend]'s booking rules. */
 @RunWith(RobolectricTestRunner::class)
@@ -189,6 +202,172 @@ class AddMeetingFlowTest {
 
         waitForText("Rooms today")
         assertTrue(backend.meetings.isEmpty())
+    }
+
+    // --- The time dial (issue #28, option 2) ------------------------------------------------------
+
+    /** The text a form field shows, read from its (disabled) text field. */
+    private fun fieldValue(label: String): String =
+        field(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text.orEmpty()
+
+    private fun openTimeDialog(label: String) {
+        field(label).performClick()
+        waitForText("Select time")
+    }
+
+    private fun dialogButton(text: String) = compose.onNode(hasText(text) and hasClickAction())
+
+    /** The dial's minute label for [minute] (the header's value text carries the same description, higher up). */
+    private fun dialLabel(description: String): SemanticsNode =
+        compose.onAllNodes(hasContentDescription(description)).fetchSemanticsNodes().maxBy { it.boundsInRoot.center.y }
+
+    /** Touches go to the dialog's window through any node in it; positions are relative to that node. */
+    private val dialog get() = compose.onNode(hasText("Select time"))
+    private fun dialogOrigin() = compose.onAllNodes(hasText("Select time")).fetchSemanticsNodes().single().boundsInRoot.topLeft
+
+    /** A real tap on the dial, at the label described so ("9 hours", "30 minutes"). */
+    private fun tapDial(description: String) {
+        compose.waitUntil(5_000) { compose.onAllNodes(hasContentDescription(description)).fetchSemanticsNodes().isNotEmpty() }
+        val at = dialLabel(description).boundsInRoot.center - dialogOrigin()
+        dialog.performTouchInput { click(at) }
+        compose.waitForIdle()
+    }
+
+    /** The minute the header shows, as text ("00", "15"...). */
+    private fun headerMinute(): String =
+        compose.onNode(hasContentDescription("Select minutes")).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
+
+    /** The minute label the dial highlights, by its description ("45 minutes"). */
+    private fun highlightedMinute(): String =
+        compose.onAllNodes(hasContentDescription(" minutes", substring = true)).fetchSemanticsNodes()
+            .filter { it.config.getOrNull(SemanticsProperties.Selected) == true && it.config.getOrNull(SemanticsProperties.ContentDescription)?.size == 1 }
+            .joinToString { it.config[SemanticsProperties.ContentDescription].single() }
+
+    // Use case F.41 through the dial: pick an hour and a minute, OK, and the form shows it.
+    @Test
+    fun aTimePickedOnTheDialFillsTheField() {
+        openForm()
+        val end = fieldValue("End time")
+        openTimeDialog("Start time")
+        tapDial("3 hours")
+        tapDial("15 minutes")
+        assertEquals("15", headerMinute())
+        dialogButton("OK").performClick()
+
+        waitForText("03:15")
+        assertEquals("03:15", fieldValue("Start time"))
+        assertEquals(end, fieldValue("End time"))
+    }
+
+    @Test
+    fun cancelLeavesTheTimeAsItWas() {
+        openForm()
+        val before = fieldValue("Start time")
+        openTimeDialog("Start time")
+        tapDial(if (before.startsWith("03")) "4 hours" else "3 hours")
+        tapDial("45 minutes")
+        dialogButton("Cancel").performClick()
+
+        compose.waitUntil(5_000) { !shown("Select time") }
+        assertEquals(before, fieldValue("Start time"))
+    }
+
+    // A tap on the dial rounds to 5 minutes; the form's dial goes on to the nearest quarter.
+    @Test
+    fun aTapBetweenQuartersGoesToTheNearestQuarter() {
+        openForm()
+        openTimeDialog("Start time")
+        tapDial("3 hours")
+        tapDial("10 minutes")
+        assertEquals("15", headerMinute())
+        assertEquals("15 minutes", highlightedMinute())
+        tapDial("50 minutes")
+        assertEquals("45", headerMinute())
+        dialogButton("OK").performClick()
+        waitForText("03:45")
+    }
+
+    /**
+     * The experiment issue #28 asks for: a drag gives any minute, and the form holds it to quarter
+     * hours as it moves. The header and highlight only ever show a quarter, with no fight or jitter;
+     * the hand follows the finger, and on release lands on the quarter the header shows (the PNG shows
+     * the hand). OK books that quarter.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test
+    fun aDragOffTheQuarterLandsOnTheNearestQuarter() {
+        openForm()
+        openTimeDialog("Start time")
+        tapDial("3 hours")
+        // The minute dial is up once its labels are.
+        compose.waitUntil(5_000) { compose.onAllNodes(hasContentDescription("55 minutes")).fetchSemanticsNodes().isNotEmpty() }
+
+        val top = dialLabel("0 minutes").boundsInRoot.center
+        val bottom = dialLabel("30 minutes").boundsInRoot.center
+        val centre = Offset((top.x + bottom.x) / 2, (top.y + bottom.y) / 2)
+        val radius = (bottom.y - top.y) / 2
+        val origin = dialogOrigin()
+        fun at(minute: Int): Offset {
+            val angle = Math.toRadians(minute * 6.0)
+            return Offset(centre.x + radius * sin(angle).toFloat(), centre.y - radius * cos(angle).toFloat()) - origin
+        }
+
+        val seen = mutableListOf<String>()
+        dialog.performTouchInput { down(at(2)) }
+        for (minute in 3..40) {
+            dialog.performTouchInput { moveTo(at(minute)) }
+            compose.waitForIdle()
+            seen += headerMinute()
+        }
+        // Every reading on the way was a quarter, and once the drag was under way (past the touch slop)
+        // the header stepped through each quarter in turn, never back.
+        assertTrue("header showed $seen", seen.all { it in listOf("00", "15", "30", "45") })
+        assertTrue("header showed $seen", "00" in seen)
+        assertEquals("header showed $seen", listOf("15", "30", "45"), seen.drop(7).distinct()) // from minute 10 on
+        dialog.performTouchInput { up() }
+        compose.waitForIdle()
+
+        assertEquals("45", headerMinute())
+        assertEquals("45 minutes", highlightedMinute())
+        captureScreenRoboImage("src/test/screenshots/time-dial-after-drag.png")
+        dialogButton("OK").performClick()
+        waitForText("03:45")
+        assertEquals("03:45", fieldValue("Start time"))
+    }
+
+    // Typed input: an off-quarter minute is booked as the nearest quarter, the hour as typed.
+    @Test
+    fun aTypedTimeOffTheQuarterIsBookedOnTheNearestQuarter() {
+        openForm()
+        openTimeDialog("End time")
+        // A 24-hour account: no AM or PM.
+        assertFalse(compose.onAllNodes(hasContentDescription("Select AM or PM")).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithContentDescription("Switch to text input mode").performClick()
+        compose.onNode(hasContentDescription("for hour") and hasSetTextAction()).performTextReplacement("14")
+        compose.onNode(hasContentDescription("for minutes") and hasSetTextAction()).performTextReplacement("37")
+        dialogButton("OK").performClick()
+
+        waitForText("14:30")
+        assertEquals("14:30", fieldValue("End time"))
+    }
+
+    // Use case N.103: on a 12-hour clock the dial has AM and PM, and a typed afternoon time books as such.
+    @Test
+    fun aTwelveHourAccountTypesTheTimeWithAmOrPm() {
+        backend.timeFormat = "AmPm"
+        openForm()
+        openTimeDialog("Start time")
+        // Twelve hours with AM and PM, not two rings of 24.
+        assertTrue(compose.onAllNodes(hasContentDescription("Select AM or PM")).fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithContentDescription("Switch to text input mode").performClick()
+        compose.onNode(hasContentDescription("for hour") and hasSetTextAction()).performTextReplacement("2")
+        compose.onNode(hasContentDescription("for minutes") and hasSetTextAction()).performTextReplacement("50")
+        dialogButton("PM").performClick()
+        dialogButton("OK").performClick()
+
+        waitForText("02:45 PM")
+        assertEquals("02:45 PM", fieldValue("Start time"))
     }
 }
 
