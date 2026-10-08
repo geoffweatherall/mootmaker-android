@@ -1,6 +1,7 @@
 package com.mootmaker.app.ui.addmeeting
 
 import com.mootmaker.app.ui.FirstLoad
+import com.mootmaker.app.ui.MootmakerIcons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -145,10 +147,13 @@ private fun Form(state: AddMeetingState, reference: MeetingFormReference, action
 
         MenuField("Room", room?.label.orEmpty(), reference.rooms.map { it.label to it.id }, actions.onRoom)
         OutlinedButton(onClick = actions.onSuggestRoom, enabled = !state.suggesting, modifier = Modifier.fillMaxWidth()) {
+            // The sparkle is decorative (the text names the button); the spinner takes its place while loading.
             if (state.suggesting) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
+                CircularProgressIndicator(Modifier.size(ButtonDefaults.IconSize), strokeWidth = 2.dp)
+            } else {
+                Icon(MootmakerIcons.Sparkle, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             }
+            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text("Suggest a room")
         }
 
