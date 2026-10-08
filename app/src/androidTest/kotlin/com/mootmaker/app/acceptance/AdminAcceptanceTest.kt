@@ -14,7 +14,6 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
@@ -208,7 +207,9 @@ class AdminAcceptanceTest {
         // Home's agenda row names the meeting's room after its time, and only by the new name.
         compose.scrollHomeTo(hasText("· $name renamed", substring = true))
         assertFalse(compose.onAllNodes(hasText("· $name", substring = true) and !hasText("renamed", substring = true)).fetchSemanticsNodes().isNotEmpty())
-        compose.onNodeWithText("Rooms today").performScrollTo().performClick()
+        // Back up to the top of home's lazy list, where the agenda scroll left Rooms today uncomposed.
+        compose.scrollHomeTo(hasText("Rooms today") and hasClickAction())
+        compose.onNode(hasText("Rooms today") and hasClickAction()).performClick()
         compose.waitForText("Room availability")
         compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasText("$name renamed"))
         assertFalse(compose.shown(name))
