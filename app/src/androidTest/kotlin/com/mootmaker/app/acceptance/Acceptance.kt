@@ -1,6 +1,9 @@
 package com.mootmaker.app.acceptance
 
 import android.util.Base64
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasScrollAction
@@ -322,11 +325,35 @@ fun ComposeTestRule.shown(text: String) = onAllNodes(hasText(text)).fetchSemanti
 
 fun ComposeTestRule.onAllNodesWithTextFirst(text: String): SemanticsNodeInteraction = onAllNodes(hasText(text)).onFirst()
 
-fun ComposeTestRule.waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
+fun ComposeTestRule.waitForText(text: String) = waitSaying("\"$text\"") { shown(text) }
 
 /** For text that is part of a longer line, such as a time range inside an agenda row. */
 fun ComposeTestRule.waitForTextContaining(text: String) =
-    waitUntil(TIMEOUT_MS) { onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    waitSaying("text containing \"$text\"") { onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+
+/**
+ * Waits as [ComposeTestRule.waitUntil] does, but a timeout says what it waited for and what was on
+ * screen instead, which is all a cloud session gets to see of a failure (its annotation).
+ */
+private fun ComposeTestRule.waitSaying(what: String, condition: () -> Boolean) {
+    try {
+        waitUntil(TIMEOUT_MS, condition)
+    } catch (timeout: ComposeTimeoutException) {
+        throw AssertionError("Waited ${TIMEOUT_MS / 1000}s for $what; on screen: ${screenText()}", timeout)
+    }
+}
+
+/** Every text and field value on screen, in order, for a failure message. */
+fun ComposeTestRule.screenText(): String = runCatching {
+    onAllNodes(SemanticsMatcher("any text") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+        .flatMap { node ->
+            node.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text } +
+                listOfNotNull(node.config.getOrNull(SemanticsProperties.EditableText)?.text?.let { "[$it]" })
+        }
+        .filter { it.isNotBlank() }
+        .joinToString(" / ")
+        .take(600)
+}.getOrElse { "(unreadable: ${it.message})" }
 
 /**
  * Scrolls the home screen's list until a node matching [matcher] is composed. Home is a lazy list:

@@ -3,7 +3,7 @@
 
 A cloud session can read check-run annotations through the REST API but cannot download logs or
 artifacts, so every failure has to be said here, briefly: its first line, then each "Caused by" and
-the first frame in this app's own code. A test helper's error (Compose's "Failed to inject touch
+the first frame in this app's own code and the first in the test class. A test helper's error (Compose's "Failed to inject touch
 input", say) names the real reason only in its cause, and the frame says which test line it was.
 """
 import glob
@@ -23,8 +23,11 @@ for pattern in patterns:
                 message = (bad.get("message") or (bad.text or "")).strip().splitlines()
                 trace = (bad.text or "").splitlines()
                 causes = [line.strip()[:200] for line in trace if line.strip().startswith("Caused by:")]
-                frame = next((line.strip() for line in trace if line.strip().startswith("at com.mootmaker.")), None)
-                detail = " | ".join(([message[0]] if message else []) + causes[:3] + ([frame] if frame else []))
+                # The first app frame is often a shared helper; the first in the test's own class says which line.
+                frames = [line.strip() for line in trace if line.strip().startswith("at com.mootmaker.")]
+                own = next((f for f in frames if f.startswith(f"at {case.get('classname')}.")), None)
+                frames = list(dict.fromkeys(frames[:1] + ([own] if own else [])))
+                detail = " | ".join(([message[0]] if message else []) + causes[:3] + frames)
                 failures.append((f"{case.get('classname')}.{case.get('name')}", detail))
 
 lines = [f"{total} tests, {len(failures)} failed, {len(skipped)} skipped"]
