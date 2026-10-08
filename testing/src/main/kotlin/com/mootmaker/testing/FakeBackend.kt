@@ -20,6 +20,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import java.io.IOException
 import java.time.LocalDate
+import java.util.concurrent.CopyOnWriteArrayList
 
 data class FakeRoom(val id: String, val name: String, val color: String? = null, val capacity: Int = 6)
 
@@ -101,8 +102,11 @@ class FakeBackend : Interceptor {
     var earliestRetainedDate: String = "2000-01-03"
     var latestBookableDate: String = "2100-01-01"
 
-    /** Every request's short description ("cognito InitiateAuth", "graphql Home"...), in order. */
-    val requests = mutableListOf<String>()
+    /**
+     * Every request's short description ("cognito InitiateAuth", "graphql Home"...), in order. OkHttp
+     * appends from its own threads while a test reads, so it must be safe to iterate during a write.
+     */
+    val requests: MutableList<String> = CopyOnWriteArrayList()
 
     val httpClient: OkHttpClient = OkHttpClient.Builder().addInterceptor(this).build()
 
