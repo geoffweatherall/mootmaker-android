@@ -53,7 +53,7 @@ class AccountAcceptanceTest {
     /**
      * The form's button, scrolled into view with the keyboard closed first. A tap is injected through the window
      * manager, so with the keyboard up it can land on the keyboard, or, as the form re-lays out when
-     * the keyboard goes, on the Sign in link below the button (a release-bound run once found itself
+     * the keyboard goes, on the Sign in link below the button (a PR acceptance run once found itself
      * back on sign-in after Reset password).
      */
     private fun button(text: String): SemanticsNodeInteraction {
