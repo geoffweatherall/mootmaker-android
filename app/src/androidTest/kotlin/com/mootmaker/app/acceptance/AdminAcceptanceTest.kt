@@ -5,7 +5,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -82,10 +82,14 @@ class AdminAcceptanceTest {
         compose.waitForIdle()
     }
 
-    /** The row control for [description] ("Edit X", "Remove X"), scrolled into view in the list first. */
+    /**
+     * The row control for [description] ("Edit X", "Remove X"), scrolled into view in the list first.
+     * The list is found by its scroll-to-index action, not any scroll action: a filter holding a long
+     * email overflows its single line and becomes scrollable too.
+     */
     private fun rowAction(description: String): SemanticsNodeInteraction {
-        compose.waitUntil(30_000) { compose.onAllNodes(hasScrollAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasScrollAction()).performScrollToNode(hasContentDescription(description))
+        compose.waitUntil(30_000) { compose.onAllNodes(hasScrollToIndexAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription(description))
         return compose.onNode(hasContentDescription(description))
     }
 
