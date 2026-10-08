@@ -1,25 +1,21 @@
 package com.mootmaker.data.api
 
-import com.apollographql.apollo.ApolloClient
-import com.apollographql.apollo.api.Optional
-import com.apollographql.apollo.exception.ApolloNetworkException
 import com.mootmaker.data.agenda.Agenda
 import com.mootmaker.data.agenda.NeedsResponseItem
 import com.mootmaker.data.agenda.SEARCH_STEP_DAYS
-import com.mootmaker.data.agenda.needsResponse
-import com.mootmaker.data.agenda.windowEnd
-import com.mootmaker.data.agenda.DayInput
-import com.mootmaker.data.agenda.MeetingInput
-import com.mootmaker.data.agenda.RoomColor
-import com.mootmaker.data.agenda.RoomInput
 import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.agenda.buildAgenda
-import com.mootmaker.data.graphql.HomeQuery
-import com.mootmaker.data.graphql.type.AttendeeStatus as ApiAttendeeStatus
-import com.mootmaker.data.graphql.type.RoomColor as ApiRoomColor
-import com.mootmaker.data.meeting.AttendeeStatus
-import com.mootmaker.data.graphql.type.TimeFormat as ApiTimeFormat
-import java.io.IOException
+import com.mootmaker.data.agenda.needsResponse
+import com.mootmaker.data.agenda.windowEnd
+import com.mootmaker.data.cache.CachedDay
+import com.mootmaker.data.cache.Loaded
+import com.mootmaker.data.cache.Reference
+import com.mootmaker.data.cache.WorkspaceStore
+import com.mootmaker.data.cache.peopleById
+import com.mootmaker.data.cache.toDayInputs
+import com.mootmaker.data.cache.toRoomInputs
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 
 /** What the home screen shows. [agenda] is null when the account has no linked Person (D.24). */
@@ -39,84 +35,52 @@ data class HomeData(
 class ApiException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 interface HomeSource {
-    /** [searchLevel] widens the needs-response window by [SEARCH_STEP_DAYS] days per step. */
-    suspend fun load(today: LocalDate, searchLevel: Int = 0): HomeData
+    /**
+     * Home's data for the window starting [today], widened [searchLevel] times by [SEARCH_STEP_DAYS]
+     * days, as it changes: from the store at once when held, then as refetches land.
+     */
+    fun observe(today: LocalDate, searchLevel: Int = 0): Flow<Loaded<HomeData>>
+
+    /** Fetches again whatever failed: the screen's Try again. */
+    fun retry()
 }
 
 /**
- * Loads the home screen through the API's composite `workspace` entry point: one request for
- * `me`, the rooms and today's and tomorrow's days.
- *
- * Refetches on every call, with no cache in between. That is the Android form of the webapp's
- * evict-and-refetch: a screen refetches when it becomes visible and when a live broadcast arrives
- * (M6), so nothing here can be stale for longer than the next of those.
+ * Home over the [WorkspaceStore]: the reference data and the window's days. Nothing here fetches;
+ * the store does, and keeps what it holds honest (mootmaker/designs/android-cache.md).
  */
-class HomeRepository(
-    private val apollo: suspend () -> ApolloClient,
-    private val idToken: suspend () -> String,
-) : HomeSource {
-    override suspend fun load(today: LocalDate, searchLevel: Int): HomeData {
-        val windowEnd = windowEnd(today, searchLevel)
-        val dates = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(windowEnd) }.map { it.toString() }.toList()
-        val token = idToken()
-        val response = try {
-            apollo().query(HomeQuery(Optional.present(dates)))
-                .addHttpHeader("Authorization", token)
-                .execute()
-        } catch (network: IOException) {
-            throw ApiException(NETWORK_MESSAGE, network)
-        }
-        val workspace = response.data?.workspace
-        if (workspace == null) {
-            val messages = response.errors?.map { it.message }.orEmpty()
-            throw when {
-                messages.isNotEmpty() -> ApiException(messages.joinToString("\n"))
-                response.exception is ApolloNetworkException -> ApiException(NETWORK_MESSAGE, response.exception)
-                else -> ApiException(response.exception?.message ?: "Something went wrong loading your day.", response.exception)
-            }
-        }
-        val me = workspace.me
-        val roomInputs = workspace.rooms.map { RoomInput(it.id, it.name, it.color.toRoomColor()) }
-        val dayInputs = workspace.days.map { day ->
-            DayInput(
-                date = day.date,
-                meetings = day.meetings.map { meeting ->
-                    MeetingInput(
-                        id = meeting.id,
-                        subject = meeting.subject,
-                        startTime = meeting.startTime,
-                        endTime = meeting.endTime,
-                        roomId = meeting.room.id,
-                        organiserId = meeting.organiser.id,
-                        attendeeIds = meeting.attendees.map { it.person.id },
-                        organiserName = meeting.organiser.name,
-                        attendeeStatuses = meeting.attendees.associate { it.person.id to it.status.toStatus() },
-                    )
-                },
+class HomeRepository(private val store: WorkspaceStore) : HomeSource {
+    override fun retry() = store.retry()
+
+    override fun observe(today: LocalDate, searchLevel: Int): Flow<Loaded<HomeData>> {
+        val end = windowEnd(today, searchLevel)
+        val dates = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
+        return combine(store.reference(), store.days(dates)) { reference, days ->
+            val held = reference.value
+            Loaded(
+                data = if (reference.known && held != null && days.allKnown) homeData(held, days.days, today, end) else null,
+                fetching = reference.fetching || days.fetching,
+                error = reference.error ?: days.error,
             )
         }
-        return HomeData(
-            name = me?.name,
-            avatarUrl = me?.avatarUrl,
-            timeFormat = when (me?.timeFormat) {
-                ApiTimeFormat.AmPm -> TimeFormat.AmPm
-                else -> TimeFormat.TwentyFourHour
-            },
-            agenda = me?.let { person -> buildAgenda(person.id, today, dayInputs, roomInputs) },
-            needsResponse = me?.let { person -> needsResponse(person.id, dayInputs, roomInputs) }.orEmpty(),
-            windowEnd = windowEnd,
-        )
     }
-
-    // A status from a newer API reads as "No response", the only state that asks nothing of anyone.
-    private fun ApiAttendeeStatus.toStatus(): AttendeeStatus =
-        AttendeeStatus.entries.firstOrNull { it.name == rawValue } ?: AttendeeStatus.NoResponse
-
-    private fun ApiRoomColor?.toRoomColor(): RoomColor? =
-        // An unknown colour from a newer API (UNKNOWN__) falls back to the by-name slot.
-        this?.let { api -> RoomColor.entries.firstOrNull { it.name == api.rawValue } }
 
     companion object {
         const val NETWORK_MESSAGE = "Couldn't reach Mootmaker. Check your connection and try again."
     }
+}
+
+/** What Home shows, from what the store holds. */
+fun homeData(reference: Reference, days: List<CachedDay>, today: LocalDate, windowEnd: LocalDate): HomeData {
+    val rooms = reference.rooms.toRoomInputs()
+    val dayInputs = days.toDayInputs(reference.peopleById())
+    val me = reference.me
+    return HomeData(
+        name = me?.name,
+        avatarUrl = me?.avatarUrl,
+        timeFormat = me?.timeFormat ?: TimeFormat.TwentyFourHour,
+        agenda = me?.let { person -> buildAgenda(person.id, today, dayInputs, rooms) },
+        needsResponse = me?.let { person -> needsResponse(person.id, dayInputs, rooms) }.orEmpty(),
+        windowEnd = windowEnd,
+    )
 }

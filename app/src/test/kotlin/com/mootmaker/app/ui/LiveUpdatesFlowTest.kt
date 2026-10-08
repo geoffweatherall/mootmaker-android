@@ -66,13 +66,13 @@ class LiveUpdatesFlowTest {
     @Test
     fun aMeetingBookedByAnotherClientAppearsOnHome() {
         signInToHome()
-        val loads = backend.requests.count { it == "graphql Home" }
+        val loads = backend.requests.count { it == "graphql Days" }
 
         backend.meetings = backend.meetings + FakeBackend.meeting("second", "Booked elsewhere", today, 11)
         broadcast(today.toString())
 
         waitForText("Booked elsewhere")
-        assertTrue(backend.requests.count { it == "graphql Home" } > loads)
+        assertTrue(backend.requests.count { it == "graphql Days" } > loads)
     }
 
     // Reconnecting says nothing about what was missed, so it refetches too.

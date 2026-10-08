@@ -49,6 +49,8 @@ class SettingsRepository(
     private val apollo: suspend () -> ApolloClient,
     private val idToken: suspend () -> String,
     private val http: OkHttpClient,
+    /** Called after every write: your name, formats and avatar are reference data, never broadcast. */
+    private val onWrite: () -> Unit = {},
 ) : SettingsSource {
     override suspend fun load(): Profile? {
         val me = apollo().call(SettingsQuery(), idToken(), "Something went wrong loading your settings.").workspace.me ?: return null
@@ -122,10 +124,13 @@ class SettingsRepository(
         }
     }
 
-    private fun outcome(errors: List<String>, applied: Boolean): SettingsResult = when {
-        errors.isNotEmpty() -> SettingsResult.Rejected(errors)
-        applied -> SettingsResult.Saved
-        else -> throw ApiException(FAILED)
+    private fun outcome(errors: List<String>, applied: Boolean): SettingsResult {
+        onWrite()
+        return when {
+            errors.isNotEmpty() -> SettingsResult.Rejected(errors)
+            applied -> SettingsResult.Saved
+            else -> throw ApiException(FAILED)
+        }
     }
 
     private companion object {

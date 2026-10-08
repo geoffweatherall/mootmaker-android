@@ -48,6 +48,8 @@ interface AdminSource {
 class AdminRepository(
     private val apollo: suspend () -> ApolloClient,
     private val idToken: suspend () -> String,
+    /** Called after every write. Rooms and people are never broadcast, and a deleted person leaves meetings. */
+    private val onWrite: () -> Unit = {},
 ) : AdminSource {
     override suspend fun rooms(): List<AdminRoom> {
         val rooms = apollo().call(AdminRoomsQuery(), idToken(), "Something went wrong loading the rooms.").workspace.rooms
@@ -111,10 +113,13 @@ class AdminRepository(
     private fun ApiRoomColor?.toRoomColor(): RoomColor? =
         this?.let { api -> RoomColor.entries.firstOrNull { it.name == api.rawValue } }
 
-    private fun outcome(errors: List<String>, applied: Boolean): AdminResult = when {
-        errors.isNotEmpty() -> AdminResult.Rejected(errors)
-        applied -> AdminResult.Done
-        else -> throw ApiException(FAILED)
+    private fun outcome(errors: List<String>, applied: Boolean): AdminResult {
+        onWrite()
+        return when {
+            errors.isNotEmpty() -> AdminResult.Rejected(errors)
+            applied -> AdminResult.Done
+            else -> throw ApiException(FAILED)
+        }
     }
 
     private companion object {

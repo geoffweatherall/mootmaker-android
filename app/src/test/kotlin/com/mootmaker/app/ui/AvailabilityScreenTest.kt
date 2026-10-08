@@ -45,7 +45,7 @@ val SAMPLE_AVAILABILITY = AvailabilityState(
         DateBounds(TODAY.minusDays(30), TODAY.plusDays(90)),
     ),
     expanded = setOf("r2"),
-)
+).let { it.copy(bounds = it.data!!.bounds) }
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -127,7 +127,7 @@ class AvailabilityScreenTest {
 
     @Test
     fun theFirstAndLastBookableDaysDisableTheirDirection() {
-        val bounds = SAMPLE_AVAILABILITY.data!!.bounds!!
+        val bounds = SAMPLE_AVAILABILITY.bounds!!
         show(SAMPLE_AVAILABILITY.copy(date = bounds.earliest))
         compose.onNodeWithContentDescription("Previous day").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Next day").assertIsDisplayed()

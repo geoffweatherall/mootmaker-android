@@ -1,5 +1,9 @@
 package com.mootmaker.data.api
 
+import com.mootmaker.data.cache.WorkspaceStore
+import java.time.LocalDate
+import java.time.LocalDateTime
+
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
 import com.mootmaker.data.agenda.DateFormat
@@ -39,6 +43,8 @@ interface MeetingFormSource {
 class MeetingFormRepository(
     private val apollo: suspend () -> ApolloClient,
     private val idToken: suspend () -> String,
+    /** Told what each saved meeting changed, so this device's own change never waits on the live channel. */
+    private val store: WorkspaceStore? = null,
 ) : MeetingFormSource {
     override suspend fun loadReference(): MeetingFormReference {
         val workspace = apollo().call(MeetingFormQuery(), idToken(), "Something went wrong loading the form.").workspace
@@ -68,7 +74,7 @@ class MeetingFormRepository(
         val meetingId = result.meeting?.id
         return when {
             result.errors.isNotEmpty() -> CreateResult.Rejected(result.errors.map { meetingErrorMessage(it.rawValue) })
-            meetingId != null -> CreateResult.Created(meetingId)
+            meetingId != null -> CreateResult.Created(meetingId).also { store?.invalidateDays(listOf(draft.date())) }
             else -> throw ApiException("Something went wrong saving the meeting.")
         }
     }
@@ -92,10 +98,17 @@ class MeetingFormRepository(
         val updatedId = result.meeting?.id
         return when {
             result.errors.isNotEmpty() -> CreateResult.Rejected(result.errors.map { meetingErrorMessage(it.rawValue) })
-            updatedId != null -> CreateResult.Created(updatedId)
+            updatedId != null -> CreateResult.Created(updatedId).also {
+                // Its old day (found by id in what the store holds) and its new one, which differ for a move.
+                store?.invalidateMeeting(meetingId)
+                store?.invalidateDays(listOf(draft.date()))
+            }
             else -> throw ApiException("Something went wrong saving the meeting.")
         }
     }
+
+    /** The day a draft's meeting starts on. Its times are naive local date-times: never through an Instant. */
+    private fun MeetingDraft.date(): LocalDate = LocalDateTime.parse(startTime).toLocalDate()
 
     private fun MeetingDraft.toInput() = MeetingInput(
         roomId = roomId,

@@ -614,4 +614,20 @@ class WorkspaceStoreTest {
         answerDays(0, day(D1, meeting("m1", D1, "From the day, later")))
         assertEquals("From the day, later", view.value!!.meeting!!.subject)
     }
+
+    @Test
+    fun `invalidating a meeting refetches the watched day holding it, and its lookup`() = runTest {
+        val store = store()
+        watch(store.days(listOf(D1, D2)))
+        answerDays(0, day(D1, meeting("m1", D1)))
+        val lookup = watch(store.meeting("m9"))
+        answerLookup(0, meeting("m9", D3))
+
+        store.invalidateMeeting("m1")
+        store.invalidateMeeting("m9")
+        runCurrent()
+        assertEquals(listOf(D1), api.dayCalls[1].first)
+        assertEquals(2, api.lookupCalls.size)
+        assertTrue(lookup.value!!.fetching)
+    }
 }

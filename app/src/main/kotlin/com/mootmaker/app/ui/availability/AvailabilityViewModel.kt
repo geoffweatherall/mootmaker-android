@@ -2,10 +2,11 @@ package com.mootmaker.app.ui.availability
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mootmaker.data.api.ApiException
 import com.mootmaker.data.api.AvailabilityData
 import com.mootmaker.data.api.AvailabilitySource
 import com.mootmaker.data.auth.SessionExpiredException
+import com.mootmaker.data.cache.screenMessage
+import com.mootmaker.data.api.DateBounds
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,16 +21,21 @@ data class AvailabilityState(
     val today: LocalDate,
     /** Minutes since midnight when the data was requested: what "free now" is relative to. */
     val nowMinutes: Int,
-    /** Null until the first load finishes. Kept on screen while another day loads. */
+    /**
+     * [date]'s data: null until that date is known, so another date's rooms never show under it, and
+     * "no meetings" only ever means the date is loaded and empty (use case M.92, #25).
+     */
     val data: AvailabilityData? = null,
+    /** The navigable window, kept across date changes so the arrows stay right while a date loads. */
+    val bounds: DateBounds? = null,
     val loading: Boolean = true,
     val error: String? = null,
     /** Rooms whose meeting list is open. Belongs to [date]: a new day starts collapsed. */
     val expanded: Set<String> = emptySet(),
 ) {
     val isToday: Boolean get() = date == today
-    val canGoBack: Boolean get() = data?.bounds?.let { date.minusDays(1) >= it.earliest } ?: true
-    val canGoForward: Boolean get() = data?.bounds?.let { date.plusDays(1) <= it.latest } ?: true
+    val canGoBack: Boolean get() = bounds?.let { date.minusDays(1) >= it.earliest } ?: true
+    val canGoForward: Boolean get() = bounds?.let { date.plusDays(1) <= it.latest } ?: true
 }
 
 class AvailabilityViewModel(
@@ -42,33 +48,43 @@ class AvailabilityViewModel(
     )
     val state: StateFlow<AvailabilityState> = _state.asStateFlow()
 
-    private var loadJob: Job? = null
+    private var watching: Job? = null
 
-    /** Loads [AvailabilityState.date]. Called when the screen becomes visible and on every day change. */
-    fun refresh() {
-        loadJob?.cancel()
-        val now = clock()
+    init {
+        watch()
+    }
+
+    /** Draws [AvailabilityState.date] from the store: at once when held, then as refetches land. */
+    private fun watch() {
+        watching?.cancel()
         val date = _state.value.date
-        _state.update { it.copy(today = now.toLocalDate(), nowMinutes = now.hour * 60 + now.minute, loading = true, error = null) }
-        loadJob = viewModelScope.launch {
-            try {
-                val data = source.load(date)
-                _state.update { it.copy(data = data, loading = false) }
-            } catch (expired: SessionExpiredException) {
-                // The session has signed out; navigation takes the user back to sign-in.
-                _state.update { it.copy(loading = false) }
-            } catch (failure: ApiException) {
-                _state.update { it.copy(loading = false, error = failure.message) }
+        watching = viewModelScope.launch {
+            source.observe(date).collect { loaded ->
+                _state.update { state ->
+                    state.copy(
+                        data = loaded.data,
+                        bounds = loaded.data?.bounds ?: state.bounds,
+                        loading = loaded.fetching || (loaded.data == null && loaded.error == null),
+                        error = loaded.error?.takeUnless { it is SessionExpiredException }?.screenMessage(),
+                    )
+                }
             }
         }
     }
 
+    /** On becoming visible and on Try again: moves "now" on, and fetches again whatever failed. */
+    fun refresh() {
+        val now = clock()
+        _state.update { it.copy(today = now.toLocalDate(), nowMinutes = now.hour * 60 + now.minute) }
+        source.retry()
+    }
+
     fun goTo(date: LocalDate) {
-        val bounds = _state.value.data?.bounds
+        val bounds = _state.value.bounds
         val target = if (bounds == null) date else date.coerceIn(bounds.earliest, bounds.latest)
         if (target == _state.value.date) return
-        _state.update { it.copy(date = target, expanded = emptySet()) }
-        refresh()
+        _state.update { it.copy(date = target, expanded = emptySet(), data = null) }
+        watch()
     }
 
     fun previousDay() = goTo(_state.value.date.minusDays(1))

@@ -1,44 +1,4 @@
-# The meeting details screen's one request. `meeting(id)` is the one lookup that works from a cold
-# link; the rooms ride along only for the room's colour, which depends on its position in the
-# name-sorted room list. Names are selected on the meeting itself, since nothing is cached.
-query MeetingDetails($id: ID!) {
-  meeting(id: $id) {
-    id
-    subject
-    startTime
-    endTime
-    version
-    room {
-      id
-      name
-    }
-    organiser {
-      id
-      name
-      avatarUrl
-    }
-    attendees {
-      person {
-        id
-        name
-        avatarUrl
-      }
-      status
-    }
-  }
-  workspace {
-    me {
-      id
-      timeFormat
-      dateFormat
-    }
-    rooms {
-      id
-      name
-      color
-    }
-  }
-}
+# The meeting details screen's writes. Its read comes from the workspace store (Days, MeetingById).
 
 # A rejected response comes back as a successful response with `errors` set, not as a GraphQL error.
 mutation RespondToMeeting($meetingId: ID!, $status: AttendeeStatus!) {

@@ -6,10 +6,10 @@ import com.mootmaker.data.api.ApiException
 import com.mootmaker.data.api.MeetingSource
 import com.mootmaker.data.api.WriteResult
 import com.mootmaker.data.auth.SessionExpiredException
+import com.mootmaker.data.cache.screenMessage
 import com.mootmaker.data.meeting.AttendeeStatus
 import com.mootmaker.data.meeting.MeetingDetailsData
 import com.mootmaker.data.meeting.canEditMeeting
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,34 +40,24 @@ class MeetingDetailsViewModel(
     private val _state = MutableStateFlow(MeetingDetailsState())
     val state: StateFlow<MeetingDetailsState> = _state.asStateFlow()
 
-    private var loadJob: Job? = null
-    private var reloadWhenDone = false
-
-    /** Refetches. Called whenever the screen becomes visible, and by [refreshForLiveChange]. */
-    fun refresh() {
-        if (loadJob?.isActive == true) return
-        _state.update { it.copy(loading = true, error = null) }
-        loadJob = viewModelScope.launch {
-            try {
-                val data = source.load(meetingId)
-                _state.update { it.copy(data = data, loading = false) }
-            } catch (expired: SessionExpiredException) {
-                // The session has signed out; navigation takes the user back to sign-in.
-                _state.update { it.copy(loading = false) }
-            } catch (failure: ApiException) {
-                _state.update { it.copy(loading = false, error = failure.message) }
+    init {
+        // Draws from the store: at once when the meeting is in a held day, then as refetches land.
+        // The store refetches on live changes itself, and follows a meeting that moves or is cancelled.
+        viewModelScope.launch {
+            source.observe(meetingId).collect { loaded ->
+                _state.update { state ->
+                    state.copy(
+                        data = loaded.data ?: state.data,
+                        loading = loaded.fetching || (loaded.data == null && loaded.error == null),
+                        error = loaded.error?.takeUnless { it is SessionExpiredException }?.screenMessage(),
+                    )
+                }
             }
-        }.also { job -> job.invokeOnCompletion { if (reloadWhenDone) { reloadWhenDone = false; refresh() } } }
+        }
     }
 
-    /**
-     * A live broadcast says what is held may be stale. A load already in flight may have read the
-     * server before that change, so it is followed by another rather than trusted (the webapp's
-     * in-flight race: stale data landing after the eviction, with nothing left to refetch it).
-     */
-    fun refreshForLiveChange() {
-        if (loadJob?.isActive == true) reloadWhenDone = true else refresh()
-    }
+    /** On becoming visible and on Try again: fetches again whatever failed. */
+    fun refresh() = source.retry()
 
     /** Whether Edit and Cancel are offered: the organiser or an admin (the API refuses anyone else regardless). */
     fun canEdit(): Boolean {
@@ -76,7 +66,7 @@ class MeetingDetailsViewModel(
         return canEditMeeting(meeting, data.myPersonId, isAdmin)
     }
 
-    /** Records the caller's own response, then reloads so every row shows what the server holds. */
+    /** Records the caller's own response; the write invalidates the store, which refetches the meeting's day. */
     fun respond(status: AttendeeStatus) {
         if (_state.value.responding) return
         _state.update { it.copy(responding = true, actionErrors = emptyList()) }
@@ -93,8 +83,6 @@ class MeetingDetailsViewModel(
             } finally {
                 _state.update { it.copy(responding = false) }
             }
-            loadJob?.join()
-            refresh()
         }
     }
 

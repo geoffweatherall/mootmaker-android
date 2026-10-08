@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.mootmaker.data.cache.WorkspaceStore
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -194,11 +195,7 @@ fun MootmakerApp(container: AppContainer) {
             val viewModel = viewModel { HomeViewModel(container.homeSource, container.meetingSource) }
             val state by viewModel.state.collectAsStateWithLifecycle()
             val claims = (sessionState as? SessionState.SignedIn)?.claims
-            LifecycleResumeEffect(viewModel) {
-                viewModel.refresh()
-                onPauseOrDispose { }
-            }
-            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refreshForLiveChange() } }
+            RefreshOnResume(container, viewModel::refresh)
             HomeScreen(
                 state = state,
                 fallbackName = claims?.name ?: claims?.email,
@@ -223,11 +220,7 @@ fun MootmakerApp(container: AppContainer) {
             val date = entry.arguments?.getString("date")?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
             val viewModel = viewModel { AvailabilityViewModel(container.availabilitySource, date) }
             val state by viewModel.state.collectAsStateWithLifecycle()
-            LifecycleResumeEffect(viewModel) {
-                viewModel.refresh()
-                onPauseOrDispose { }
-            }
-            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refresh() } }
+            RefreshOnResume(container, viewModel::refresh)
             AvailabilityScreen(
                 state = state,
                 actions = AvailabilityActions(
@@ -302,11 +295,7 @@ fun MootmakerApp(container: AppContainer) {
             val meetingId = entry.arguments?.getString("id").orEmpty()
             val viewModel = viewModel { MeetingDetailsViewModel(container.meetingSource, meetingId, isAdmin = (sessionState as? SessionState.SignedIn)?.claims?.isAdmin == true) }
             val state by viewModel.state.collectAsStateWithLifecycle()
-            LifecycleResumeEffect(viewModel) {
-                viewModel.refresh()
-                onPauseOrDispose { }
-            }
-            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refreshForLiveChange() } }
+            RefreshOnResume(container, viewModel::refresh)
             MeetingDetailsScreen(
                 state = state,
                 actions = MeetingDetailsActions(
@@ -331,11 +320,7 @@ fun MootmakerApp(container: AppContainer) {
             val personId = entry.arguments?.getString("personId").orEmpty()
             val viewModel = viewModel { CalendarViewModel(container.calendarSource, personId) }
             val state by viewModel.state.collectAsStateWithLifecycle()
-            LifecycleResumeEffect(viewModel) {
-                viewModel.refresh()
-                onPauseOrDispose { }
-            }
-            LaunchedEffect(viewModel) { container.liveEvents.collect { viewModel.refresh() } }
+            RefreshOnResume(container, viewModel::refresh)
             CalendarScreen(
                 state = state,
                 actions = CalendarActions(
@@ -437,6 +422,21 @@ fun MootmakerApp(container: AppContainer) {
             )
         }
     }
+    }
+}
+
+/**
+ * A screen over the workspace store becoming visible again. The store already refetches on live
+ * changes and after a reconnect, which is what the lock screen and the app switcher cause (the
+ * socket follows the activity's STARTED state). So a resume, such as closing a share sheet, refetches
+ * only what is shown and older than the safety-net age, plus anything that failed (#23).
+ */
+@Composable
+private fun RefreshOnResume(container: AppContainer, refresh: () -> Unit) {
+    LifecycleResumeEffect(container) {
+        container.workspace.refreshOlderThan(WorkspaceStore.RESUME_MAX_AGE_MILLIS)
+        refresh()
+        onPauseOrDispose { }
     }
 }
 
