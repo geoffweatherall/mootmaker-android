@@ -16,6 +16,7 @@ import com.mootmaker.data.calendar.startOfWorkWeek
 import com.mootmaker.testing.FakeBackend
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -80,7 +81,7 @@ class AppFlowTest {
         compose.onNodeWithText("Pat Example").assertIsDisplayed()
         compose.onNodeWithText("Planning").assertIsDisplayed()
         assertTrue(compose.onAllNodes(hasText("Someone else's meeting")).fetchSemanticsNodes().isEmpty())
-        assertTrue(backend.requests.containsAll(listOf("cognito InitiateAuth", "cognito RespondToAuthChallenge", "graphql Home")))
+        assertTrue(backend.requests.containsAll(listOf("cognito InitiateAuth", "cognito RespondToAuthChallenge", "graphql Reference", "graphql Days")))
     }
 
     // Use case B.9: the error is shown and nothing past sign-in is reachable.
@@ -95,7 +96,7 @@ class AppFlowTest {
         signInButton().performClick()
 
         waitForText("Incorrect username or password.")
-        assertTrue("graphql Home" !in backend.requests)
+        assertTrue("graphql Days" !in backend.requests)
     }
 
     // Use case B.13: signing out returns to sign-in, and Back can't reach the signed-in screen.
@@ -182,7 +183,7 @@ class AppFlowTest {
         compose.onNodeWithText("Rooms today").performClick()
         waitForText("Atrium")
         compose.onNodeWithText("Boardroom").assertIsDisplayed()
-        assertTrue("graphql Availability" in backend.requests)
+        assertTrue("graphql Days" in backend.requests)
 
         compose.onAllNodes(hasText("See today's meetings (1)")).onFirst().performClick()
         // Rooms sort by name, so the first card is the Atrium: its meeting shows, the Boardroom's doesn't.
@@ -217,7 +218,8 @@ class AppFlowTest {
         compose.onNodeWithText("You").assertIsDisplayed()
         compose.onNodeWithText("%02d:00–%02d:00".format(meetingHour, meetingHour + 1)).assertIsDisplayed()
         compose.onNodeWithText("$today").assertIsDisplayed()
-        assertTrue("graphql MeetingDetails" in backend.requests)
+        // Opened from Home, the meeting comes from the day Home already holds: no request (#22).
+        assertFalse("graphql MeetingById" in backend.requests)
 
         compose.onNodeWithContentDescription("Back").performClick()
         waitForText("Rooms today")
@@ -228,15 +230,18 @@ class AppFlowTest {
     fun aMeetingThatNoLongerExistsSaysSo() {
         val today = LocalDate.now()
         backend.meetings = listOf(FakeBackend.meeting("m1", "Stand-up", today, meetingHour))
-        useFakeBackend(backend)
+        val container = useFakeBackend(backend)
         launch()
         waitForText("demo@mootmaker.com")
         signInButton().performClick()
         waitForText("Stand-up")
-        // Cancelled by someone else between the list and the tap.
-        backend.meetings = emptyList()
-
         compose.onNodeWithText("Stand-up").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Attendees", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+
+        // Cancelled by someone else while open: its day is invalidated (the live channel's job), the
+        // refetched day no longer holds it, and the lookup by id that follows says it is gone.
+        backend.meetings = emptyList()
+        container.workspace.invalidateDays(listOf(today))
 
         waitForText("Meeting not found.")
     }
@@ -280,7 +285,7 @@ class AppFlowTest {
 
         waitForText("Mine on Monday")
         assertTrue(compose.onAllNodes(hasText("Sam's on Tuesday")).fetchSemanticsNodes().isEmpty())
-        assertTrue("graphql PersonCalendar" in backend.requests)
+        assertTrue("graphql Days" in backend.requests)
 
         compose.onNodeWithText("Pat Example").performClick()
         compose.onNodeWithText("Sam Other").performClick()

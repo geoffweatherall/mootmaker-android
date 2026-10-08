@@ -1,21 +1,21 @@
 package com.mootmaker.data.api
 
-import com.apollographql.apollo.ApolloClient
-import com.apollographql.apollo.api.Optional
 import com.mootmaker.data.agenda.AgendaDay
-import com.mootmaker.data.agenda.DayInput
-import com.mootmaker.data.agenda.MeetingInput
-import com.mootmaker.data.agenda.RoomColor
-import com.mootmaker.data.agenda.RoomInput
 import com.mootmaker.data.agenda.TimeFormat
+import com.mootmaker.data.cache.CachedDay
+import com.mootmaker.data.cache.Loaded
+import com.mootmaker.data.cache.Reference
+import com.mootmaker.data.cache.WorkspaceStore
+import com.mootmaker.data.cache.peopleById
+import com.mootmaker.data.cache.toDayInputs
+import com.mootmaker.data.cache.toRoomInputs
 import com.mootmaker.data.calendar.CalendarBounds
 import com.mootmaker.data.calendar.buildWeek
 import com.mootmaker.data.calendar.sortedPeople
 import com.mootmaker.data.calendar.workWeekDates
-import com.mootmaker.data.graphql.PersonCalendarQuery
-import com.mootmaker.data.graphql.type.RoomColor as ApiRoomColor
-import com.mootmaker.data.graphql.type.TimeFormat as ApiTimeFormat
 import com.mootmaker.data.meeting.PersonRef
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 
 data class CalendarData(
@@ -29,49 +29,35 @@ data class CalendarData(
 )
 
 interface CalendarSource {
-    suspend fun load(personId: String, monday: LocalDate): CalendarData
+    /** One person's working week, as it changes: from the store at once when held. */
+    fun observe(personId: String, monday: LocalDate): Flow<Loaded<CalendarData>>
+
+    /** Fetches again whatever failed: the screen's Try again. */
+    fun retry()
 }
 
-/** Loads one person's working week through the `workspace` entry point: one request, five days. */
-class CalendarRepository(
-    private val apollo: suspend () -> ApolloClient,
-    private val idToken: suspend () -> String,
-) : CalendarSource {
-    override suspend fun load(personId: String, monday: LocalDate): CalendarData {
-        val dates = workWeekDates(monday).map { it.toString() }
-        val workspace = apollo().call(
-            PersonCalendarQuery(Optional.present(dates)),
-            idToken(),
-            "Something went wrong loading the calendar.",
-        ).workspace
-        val rooms = workspace.rooms.map { RoomInput(it.id, it.name, it.color.toRoomColor()) }
-        val days = workspace.days.map { day ->
-            DayInput(
-                date = day.date,
-                meetings = day.meetings.map { meeting ->
-                    MeetingInput(
-                        id = meeting.id,
-                        subject = meeting.subject,
-                        startTime = meeting.startTime,
-                        endTime = meeting.endTime,
-                        roomId = meeting.room.id,
-                        organiserId = meeting.organiser.id,
-                        attendeeIds = meeting.attendees.map { it.person.id },
-                    )
-                },
+/**
+ * One person's working week over the [WorkspaceStore]. Days hold everyone's meetings, so a week
+ * fetched for one person serves every person: changing person costs no request.
+ */
+class CalendarRepository(private val store: WorkspaceStore) : CalendarSource {
+    override fun observe(personId: String, monday: LocalDate): Flow<Loaded<CalendarData>> =
+        combine(store.reference(), store.days(workWeekDates(monday))) { reference, days ->
+            val held = reference.value
+            Loaded(
+                data = if (reference.known && held != null && days.allKnown) calendarData(held, days.days, personId, monday) else null,
+                fetching = reference.fetching || days.fetching,
+                error = reference.error ?: days.error,
             )
         }
-        return CalendarData(
-            timeFormat = if (workspace.me?.timeFormat == ApiTimeFormat.AmPm) TimeFormat.AmPm else TimeFormat.TwentyFourHour,
-            people = sortedPeople(workspace.people.map { PersonRef(it.id, it.name) }),
-            week = buildWeek(personId, monday, days, rooms),
-            bounds = CalendarBounds(
-                earliest = LocalDate.parse(workspace.boundaries.earliestRetainedDate),
-                latest = LocalDate.parse(workspace.boundaries.latestBookableDate),
-            ),
-        )
-    }
 
-    private fun ApiRoomColor?.toRoomColor(): RoomColor? =
-        this?.let { api -> RoomColor.entries.firstOrNull { it.name == api.rawValue } }
+    override fun retry() = store.retry()
 }
+
+/** What the calendar shows for [personId]'s week, from what the store holds. */
+fun calendarData(reference: Reference, days: List<CachedDay>, personId: String, monday: LocalDate): CalendarData = CalendarData(
+    timeFormat = reference.me?.timeFormat ?: TimeFormat.TwentyFourHour,
+    people = sortedPeople(reference.people.map { PersonRef(it.id, it.name) }),
+    week = buildWeek(personId, monday, days.toDayInputs(reference.peopleById()), reference.rooms.toRoomInputs()),
+    bounds = reference.bounds,
+)

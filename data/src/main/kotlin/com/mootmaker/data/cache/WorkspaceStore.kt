@@ -171,6 +171,19 @@ class WorkspaceStore(
         )
     }
 
+    /**
+     * Marks every day holding meeting [id], and its lookup, stale: after this device changed it, when
+     * its date is not to hand. A meeting moved to another day also needs that day invalidated.
+     */
+    fun invalidateMeeting(id: String) = change {
+        snap = snap.copy(
+            days = snap.days.mapValues { (_, record) ->
+                if (record.value?.meetings?.any { it.id == id } == true) record.invalidated() else record
+            },
+            byId = snap.byId.mapValues { (key, record) -> if (key == id) record.invalidated() else record },
+        )
+    }
+
     /** Marks the reference data stale: rooms and people are never broadcast. */
     fun invalidateReference() = change { snap = snap.copy(ref = snap.ref.invalidated()) }
 

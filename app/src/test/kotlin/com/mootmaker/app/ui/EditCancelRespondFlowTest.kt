@@ -105,7 +105,7 @@ class EditCancelRespondFlowTest {
         val today = LocalDate.now()
         waitForText("· ", substring = true)
         button("Search further ahead").performClick()
-        compose.waitUntil(5_000) { backend.requests.count { it == "graphql Home" } >= 2 }
+        compose.waitUntil(5_000) { backend.requests.count { it == "graphql Days" } >= 2 }
         assertTrue(shown("Needs your response"))
     }
 

@@ -124,7 +124,7 @@ fun AvailabilityScreen(state: AvailabilityState, actions: AvailabilityActions) {
         }
     }
     if (picking) {
-        val bounds = state.data?.bounds
+        val bounds = state.bounds
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = state.date.toUtcMillis(),
             selectableDates = object : SelectableDates {

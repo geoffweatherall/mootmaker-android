@@ -49,6 +49,7 @@ import java.time.format.FormatStyle
 import java.time.format.DateTimeFormatterBuilder
 import java.time.format.DateTimeFormatter
 import java.time.LocalDate
+import java.util.UUID
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isPopup
@@ -369,6 +370,44 @@ private fun ComposeTestRule.waitSaying(what: String, condition: () -> Boolean) {
         waitUntil(TIMEOUT_MS, condition)
     } catch (timeout: ComposeTimeoutException) {
         throw AssertionError("Waited ${TIMEOUT_MS / 1000}s for $what; on screen: ${screenText()}", timeout)
+    }
+}
+
+/** True when some text on screen contains [text]. */
+fun ComposeTestRule.shownContaining(text: String) = onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+
+/** Waits until no text on screen contains [text]: something another client removed has gone. */
+fun ComposeTestRule.waitForTextToGo(text: String) = waitSaying("\"$text\" to go") { !shownContaining(text) }
+
+/**
+ * Waits until Home's list holds no row with [text] anywhere, scrolled to or not. Home is a lazy list,
+ * so a row out of view is not composed at all, and "not on screen" would prove nothing.
+ */
+fun ComposeTestRule.waitForHomeToLose(text: String) = waitSaying("Home to lose \"$text\"") {
+    onAllNodes(hasScrollAction()).fetchSemanticsNodes().isNotEmpty() &&
+        runCatching { onNode(hasScrollAction()).performScrollToNode(hasText(text, substring = true)) }.isFailure
+}
+
+/** The full-screen first-load spinner is up: nothing the screen needs is held yet. */
+fun ComposeTestRule.spinnerShown() = onAllNodes(hasContentDescription("Loading")).fetchSemanticsNodes().isNotEmpty()
+
+/**
+ * Waits until a change made elsewhere reaches the open screen, so the live channel is known to be
+ * delivering before the change a case measures. The app subscribes at sign-in and refetches once
+ * AppSync acknowledges, but a change made in the moments after that acknowledgement can arrive
+ * neither way (a release's M.111 run once saw nothing for 30 seconds). [change] makes a change that
+ * shows its argument on the open screen, through the API; it is called again, with a new value,
+ * every ten seconds until one shows.
+ */
+fun ComposeTestRule.untilLive(change: (String) -> Unit) {
+    val deadline = System.currentTimeMillis() + 60_000
+    var attempt = 0
+    while (true) {
+        val value = "Live check ${++attempt} ${UUID.randomUUID().toString().take(4)}"
+        change(value)
+        val arrived = runCatching { waitUntil(10_000) { shownContaining(value) } }.isSuccess
+        if (arrived) return
+        check(System.currentTimeMillis() < deadline) { "No change reached the open screen in 60s; on screen: ${screenText()}" }
     }
 }
 

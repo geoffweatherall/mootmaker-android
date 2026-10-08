@@ -261,7 +261,7 @@ class FakeBackend : Interceptor {
         }
         val dates = (request["variables"]?.jsonObject?.get("dates") as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
         val meetingId = request["variables"]?.jsonObject?.get("id")?.jsonPrimitive?.content
-        return respond(chain, 200, homeResponse(dates, meetingId, withMeeting = operation == "MeetingDetails" || operation == "EditMeeting"))
+        return respond(chain, 200, homeResponse(dates, meetingId, withMeeting = operation == "MeetingById" || operation == "EditMeeting"))
     }
 
     /** Rooms that hold [capacity] people and are free for the slot, smallest first then by name, as the API ranks them. */

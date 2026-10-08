@@ -57,7 +57,7 @@ val SAMPLE_CALENDAR = CalendarState(
         },
         bounds = CalendarBounds(MONDAY.minusWeeks(4), MONDAY.plusWeeks(12)),
     ),
-)
+).let { it.copy(people = it.data!!.people, bounds = it.data.bounds) }
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -133,7 +133,7 @@ class CalendarScreenTest {
     // Use case G.64.
     @Test
     fun noPeopleShowsTheEmptyState() {
-        show(SAMPLE_CALENDAR.copy(data = SAMPLE_CALENDAR.data!!.copy(people = emptyList())))
+        show(SAMPLE_CALENDAR.copy(data = SAMPLE_CALENDAR.data!!.copy(people = emptyList()), people = emptyList()))
         compose.onNodeWithText("No people exist yet.").assertIsDisplayed()
     }
 

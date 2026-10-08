@@ -2,25 +2,23 @@ package com.mootmaker.data.api
 
 import com.apollographql.apollo.ApolloClient
 import com.mootmaker.data.agenda.DateFormat
-import com.mootmaker.data.agenda.RoomColor
-import com.mootmaker.data.agenda.RoomInput
 import com.mootmaker.data.agenda.TimeFormat
+import com.mootmaker.data.cache.CachedMeeting
+import com.mootmaker.data.cache.Loaded
+import com.mootmaker.data.cache.Reference
+import com.mootmaker.data.cache.WorkspaceStore
+import com.mootmaker.data.cache.toDetailInput
+import com.mootmaker.data.cache.toRoomInputs
 import com.mootmaker.data.graphql.CancelMeetingMutation
-import com.mootmaker.data.graphql.MeetingDetailsQuery
 import com.mootmaker.data.graphql.RespondToMeetingMutation
 import com.mootmaker.data.graphql.type.AttendeeStatus as ApiAttendeeStatus
-import com.mootmaker.data.graphql.type.DateFormat as ApiDateFormat
-import com.mootmaker.data.graphql.type.RoomColor as ApiRoomColor
-import com.mootmaker.data.graphql.type.TimeFormat as ApiTimeFormat
-import com.mootmaker.data.meeting.AttendeeRow
 import com.mootmaker.data.meeting.AttendeeStatus
 import com.mootmaker.data.meeting.MeetingDetailsData
-import com.mootmaker.data.meeting.MeetingInput
-import com.mootmaker.data.meeting.MeetingRoomInput
-import com.mootmaker.data.meeting.PersonRef
 import com.mootmaker.data.meeting.buildMeetingDetail
 import com.mootmaker.data.meeting.meetingErrorMessage
 import com.mootmaker.data.meeting.respondErrorMessage
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 
 /** The outcome of a write that has nothing to return: done, or every rule it broke, worded for the screen. */
 sealed interface WriteResult {
@@ -29,7 +27,11 @@ sealed interface WriteResult {
 }
 
 interface MeetingSource {
-    suspend fun load(meetingId: String): MeetingDetailsData
+    /** The meeting and the caller's formats, as they change: from the store at once when held. */
+    fun observe(meetingId: String): Flow<Loaded<MeetingDetailsData>>
+
+    /** Fetches again whatever failed: the screen's Try again. */
+    fun retry()
 
     /** Sets the caller's own response to the meeting. */
     suspend fun respond(meetingId: String, status: AttendeeStatus): WriteResult
@@ -38,39 +40,27 @@ interface MeetingSource {
     suspend fun cancel(meetingId: String): WriteResult
 }
 
-/** Looks one meeting up by id: the lookup the API keeps for links that carry no date. */
+/**
+ * One meeting over the [WorkspaceStore], which finds it in whichever loaded day holds it, or looks
+ * it up by id for a link that carries no date. Writes go to the API, then invalidate what they
+ * changed, so this device's own change never waits on the live channel.
+ */
 class MeetingRepository(
     private val apollo: suspend () -> ApolloClient,
     private val idToken: suspend () -> String,
+    private val store: WorkspaceStore,
 ) : MeetingSource {
-    override suspend fun load(meetingId: String): MeetingDetailsData {
-        val data = apollo().call(MeetingDetailsQuery(meetingId), idToken(), "Something went wrong loading the meeting.")
-        val me = data.workspace.me
-        return MeetingDetailsData(
-            meeting = data.meeting?.let { meeting ->
-                buildMeetingDetail(
-                    MeetingInput(
-                        id = meeting.id,
-                        subject = meeting.subject,
-                        startTime = meeting.startTime,
-                        endTime = meeting.endTime,
-                        room = MeetingRoomInput(meeting.room.id, meeting.room.name),
-                        organiser = PersonRef(meeting.organiser.id, meeting.organiser.name, meeting.organiser.avatarUrl),
-                        attendees = meeting.attendees.map { AttendeeRow(PersonRef(it.person.id, it.person.name, it.person.avatarUrl), it.status.toStatus()) },
-                        version = meeting.version,
-                    ),
-                    rooms = data.workspace.rooms.map { RoomInput(it.id, it.name, it.color.toRoomColor()) },
-                )
-            },
-            myPersonId = me?.id,
-            timeFormat = if (me?.timeFormat == ApiTimeFormat.AmPm) TimeFormat.AmPm else TimeFormat.TwentyFourHour,
-            dateFormat = when (me?.dateFormat) {
-                ApiDateFormat.Usa -> DateFormat.Usa
-                ApiDateFormat.British -> DateFormat.British
-                else -> DateFormat.Iso
-            },
-        )
-    }
+    override fun retry() = store.retry()
+
+    override fun observe(meetingId: String): Flow<Loaded<MeetingDetailsData>> =
+        combine(store.reference(), store.meeting(meetingId)) { reference, view ->
+            val held = reference.value
+            Loaded(
+                data = if (reference.known && held != null && view.known) meetingDetailsData(held, view.meeting) else null,
+                fetching = reference.fetching || view.fetching,
+                error = reference.error ?: view.error,
+            )
+        }
 
     override suspend fun respond(meetingId: String, status: AttendeeStatus): WriteResult {
         val result = apollo()
@@ -80,18 +70,21 @@ class MeetingRepository(
             result.errors.isNotEmpty() -> WriteResult.Rejected(result.errors.map { respondErrorMessage(it.rawValue) })
             result.meeting != null -> WriteResult.Done
             else -> throw ApiException("Something went wrong saving your response.")
-        }
+        }.also { store.invalidateMeeting(meetingId) }
     }
 
     override suspend fun cancel(meetingId: String): WriteResult {
         val result = apollo().send(CancelMeetingMutation(meetingId), idToken(), "Something went wrong cancelling the meeting.").cancelMeeting
-        return if (result.errors.isEmpty()) WriteResult.Done else WriteResult.Rejected(result.errors.map { meetingErrorMessage(it.rawValue) })
+        if (result.errors.isNotEmpty()) return WriteResult.Rejected(result.errors.map { meetingErrorMessage(it.rawValue) })
+        store.invalidateMeeting(meetingId)
+        return WriteResult.Done
     }
-
-    // A status from a newer API reads as "No response", the only state that asks nothing of anyone.
-    private fun ApiAttendeeStatus.toStatus(): AttendeeStatus =
-        AttendeeStatus.entries.firstOrNull { it.name == rawValue } ?: AttendeeStatus.NoResponse
-
-    private fun ApiRoomColor?.toRoomColor(): RoomColor? =
-        this?.let { api -> RoomColor.entries.firstOrNull { it.name == api.rawValue } }
 }
+
+/** What the details screen shows, from what the store holds. A null [meeting] reads as gone (H.73). */
+fun meetingDetailsData(reference: Reference, meeting: CachedMeeting?): MeetingDetailsData = MeetingDetailsData(
+    meeting = meeting?.let { buildMeetingDetail(it.toDetailInput(reference), reference.rooms.toRoomInputs()) },
+    myPersonId = reference.me?.id,
+    timeFormat = reference.me?.timeFormat ?: TimeFormat.TwentyFourHour,
+    dateFormat = reference.me?.dateFormat ?: DateFormat.Iso,
+)

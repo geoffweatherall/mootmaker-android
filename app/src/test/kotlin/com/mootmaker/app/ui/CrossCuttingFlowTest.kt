@@ -53,6 +53,9 @@ class CrossCuttingFlowTest {
         scenario?.close()
     }
 
+    /** Home holds today and the next two days; the third day after today is the first it doesn't. */
+    private fun toAnUnheldDay() = repeat(3) { compose.onNodeWithContentDescription("Next day").performClick() }
+
     private fun waitForText(text: String) = compose.waitUntil(5_000) { shown(text) }
 
     private fun shown(text: String) = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
@@ -63,32 +66,45 @@ class CrossCuttingFlowTest {
     private fun progressShown() =
         compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)).fetchSemanticsNodes().isNotEmpty()
 
+    private lateinit var container: com.mootmaker.app.AppContainer
+
     private fun signIn() {
-        useFakeBackend(backend)
+        container = useFakeBackend(backend)
         scenario = ActivityScenario.launch(MainActivity::class.java)
         waitForText("demo@mootmaker.com")
         compose.onNode(hasText("Sign in") and hasClickAction()).performClick()
         waitForText("Stand-up")
     }
 
-    /** M.92: a first visit shows a centred spinner; coming back keeps the old content under a slim bar. */
+    /**
+     * M.92 over the store: a day already held draws at once; one never seen shows the centred spinner,
+     * never another day's rooms or "no meetings"; and a refetch keeps the content up under a slim bar.
+     */
     @Test
     fun aFirstLoadSpinsAndAReloadKeepsTheOldContentUnderABar() {
         signIn()
 
-        backend.holdGraphql = CountDownLatch(1)
+        // Today is already held from Home, so Rooms today draws at once, with no request (#22).
+        val before = backend.requests.size
         compose.onNodeWithText("Rooms today").performClick()
+        waitForText("Boardroom")
+        assertFalse(spinnerShown())
+        assertEquals(before, backend.requests.size)
+
+        // A day never seen: the spinner until it lands (#25).
+        backend.holdGraphql = CountDownLatch(1)
+        toAnUnheldDay()
         compose.waitUntil(5_000) { spinnerShown() }
         assertFalse(shown("Boardroom"))
         backend.holdGraphql!!.countDown()
         waitForText("Boardroom")
         assertFalse(spinnerShown())
 
-        // Back on home, which reloads as it reappears: its agenda stays, with only the bar above it.
+        // A change to the shown day refetches it under the slim bar, with its rooms kept up.
         backend.holdGraphql = CountDownLatch(1)
-        compose.onNodeWithContentDescription("Back").performClick()
+        container.workspace.invalidateDays(listOf(LocalDate.now().plusDays(3)))
         compose.waitUntil(5_000) { progressShown() }
-        assertTrue(shown("Stand-up"))
+        assertTrue(shown("Boardroom"))
         assertFalse(spinnerShown())
         backend.holdGraphql!!.countDown()
         compose.waitUntil(5_000) { !progressShown() }
@@ -98,9 +114,11 @@ class CrossCuttingFlowTest {
     @Test
     fun anUnreachableApiShowsAReadableMessage() {
         signIn()
+        compose.onNodeWithText("Rooms today").performClick()
+        waitForText("Boardroom")
 
         backend.networkDown = true
-        compose.onNodeWithText("Rooms today").performClick()
+        toAnUnheldDay()
 
         waitForText("Couldn't reach Mootmaker. Check your connection and try again.")
         assertTrue(shown("Try again"))
@@ -115,8 +133,11 @@ class CrossCuttingFlowTest {
         backend.idTokenExpiresAt = Instant.now().plusSeconds(60)
         signIn()
 
-        backend.refreshRefused = true
         compose.onNodeWithText("Rooms today").performClick()
+        waitForText("Boardroom")
+        backend.refreshRefused = true
+        // A day not held, so this is the next API call.
+        toAnUnheldDay()
 
         waitForText("Your session has expired. Sign in again.")
         assertTrue(shown("Create an account"))

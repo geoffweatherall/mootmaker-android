@@ -29,6 +29,9 @@ import com.mootmaker.data.auth.Session
 import com.mootmaker.data.auth.TokenCipher
 import com.mootmaker.data.auth.TokenStore
 import com.mootmaker.data.config.ConfigRepository
+import com.mootmaker.data.auth.SessionState
+import com.mootmaker.data.cache.ApolloWorkspaceApi
+import com.mootmaker.data.cache.WorkspaceStore
 import com.mootmaker.data.live.AppSyncRealtime
 import com.mootmaker.data.live.LiveEvent
 import com.mootmaker.data.live.LiveUpdates
@@ -75,19 +78,30 @@ class AppContainer(
         return ApolloClient.Builder().serverUrl(url).okHttpClient(http).build().also { apollo = url to it }
     }
 
-    val homeSource: HomeSource = HomeRepository(apollo = ::apolloClient, idToken = session::idToken)
+    /**
+     * The one in-memory store of what the app has seen, which every read screen draws from and the
+     * live channel keeps honest (mootmaker/designs/android-cache.md). Emptied whenever the session
+     * signs out, which every identity change (sign-out, account deletion, environment switch) does.
+     */
+    val workspace = WorkspaceStore(ApolloWorkspaceApi(apollo = ::apolloClient, idToken = session::idToken), scope)
 
-    val availabilitySource: AvailabilitySource = AvailabilityRepository(apollo = ::apolloClient, idToken = session::idToken)
+    init {
+        scope.launch { session.state.collect { if (it is SessionState.SignedOut) workspace.clear() } }
+    }
 
-    val meetingSource: MeetingSource = MeetingRepository(apollo = ::apolloClient, idToken = session::idToken)
+    val homeSource: HomeSource = HomeRepository(workspace)
 
-    val meetingFormSource: MeetingFormSource = MeetingFormRepository(apollo = ::apolloClient, idToken = session::idToken)
+    val availabilitySource: AvailabilitySource = AvailabilityRepository(workspace)
 
-    val settingsSource: SettingsSource = SettingsRepository(apollo = ::apolloClient, idToken = session::idToken, http = http)
+    val meetingSource: MeetingSource = MeetingRepository(apollo = ::apolloClient, idToken = session::idToken, store = workspace)
 
-    val adminSource: AdminSource = AdminRepository(apollo = ::apolloClient, idToken = session::idToken)
+    val meetingFormSource: MeetingFormSource = MeetingFormRepository(apollo = ::apolloClient, idToken = session::idToken, store = workspace)
 
-    val calendarSource: CalendarSource = CalendarRepository(apollo = ::apolloClient, idToken = session::idToken)
+    val settingsSource: SettingsSource = SettingsRepository(apollo = ::apolloClient, idToken = session::idToken, http = http, onWrite = workspace::invalidateReference)
+
+    val adminSource: AdminSource = AdminRepository(apollo = ::apolloClient, idToken = session::idToken, onWrite = workspace::invalidateAll)
+
+    val calendarSource: CalendarSource = CalendarRepository(workspace)
 
     /**
      * Loads avatars through the same HTTP client as everything else, so a test's fake backend plays
@@ -110,9 +124,8 @@ class AppContainer(
     private val _liveEvents = MutableSharedFlow<LiveEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /**
-     * What the open screens listen to: someone else changed something, or the channel has just
-     * (re)connected, and in both cases what a screen holds may be stale. No replay, because a screen
-     * that starts listening has just loaded.
+     * Someone else changed something, or the channel has just (re)connected. The [workspace] hears
+     * every event first; this is for anything else that holds data of its own. No replay.
      */
     val liveEvents: SharedFlow<LiveEvent> = _liveEvents
 
@@ -122,7 +135,10 @@ class AppContainer(
      * correctness never rests on one surviving.
      */
     suspend fun followLiveUpdates() {
-        liveUpdates.events().collect { _liveEvents.emit(it) }
+        liveUpdates.events().collect {
+            workspace.onLiveEvent(it)
+            _liveEvents.emit(it)
+        }
     }
 
     private var started = false

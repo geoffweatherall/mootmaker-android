@@ -1,18 +1,16 @@
 package com.mootmaker.data.api
 
-import com.apollographql.apollo.ApolloClient
-import com.apollographql.apollo.api.Optional
-import com.apollographql.apollo.exception.ApolloNetworkException
-import com.mootmaker.data.agenda.RoomColor
 import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.availability.AvailabilityMeeting
 import com.mootmaker.data.availability.AvailabilityRoom
 import com.mootmaker.data.availability.RoomCard
 import com.mootmaker.data.availability.buildRoomCards
-import com.mootmaker.data.graphql.AvailabilityQuery
-import com.mootmaker.data.graphql.type.RoomColor as ApiRoomColor
-import com.mootmaker.data.graphql.type.TimeFormat as ApiTimeFormat
-import java.io.IOException
+import com.mootmaker.data.cache.CachedDay
+import com.mootmaker.data.cache.Loaded
+import com.mootmaker.data.cache.Reference
+import com.mootmaker.data.cache.WorkspaceStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 
 /** The window the server allows navigating in: [earliest] is always a Monday. */
@@ -26,50 +24,35 @@ data class AvailabilityData(
 )
 
 interface AvailabilitySource {
-    suspend fun load(date: LocalDate): AvailabilityData
+    /** One day's room availability, as it changes: from the store at once when held. */
+    fun observe(date: LocalDate): Flow<Loaded<AvailabilityData>>
+
+    /** Fetches again whatever failed: the screen's Try again. */
+    fun retry()
 }
 
-/** Loads one day's room availability through the `workspace` entry point: one request, one day. */
-class AvailabilityRepository(
-    private val apollo: suspend () -> ApolloClient,
-    private val idToken: suspend () -> String,
-) : AvailabilitySource {
-    override suspend fun load(date: LocalDate): AvailabilityData {
-        val token = idToken()
-        val response = try {
-            apollo().query(AvailabilityQuery(Optional.present(listOf(date.toString()))))
-                .addHttpHeader("Authorization", token)
-                .execute()
-        } catch (network: IOException) {
-            throw ApiException(HomeRepository.NETWORK_MESSAGE, network)
+/** One day's room availability over the [WorkspaceStore]: the reference data and that one day. */
+class AvailabilityRepository(private val store: WorkspaceStore) : AvailabilitySource {
+    override fun observe(date: LocalDate): Flow<Loaded<AvailabilityData>> =
+        combine(store.reference(), store.days(listOf(date))) { reference, days ->
+            val held = reference.value
+            val day = days.slots.getValue(date)
+            Loaded(
+                data = if (reference.known && held != null && day.known) availabilityData(held, day.value!!) else null,
+                fetching = reference.fetching || days.fetching,
+                error = reference.error ?: days.error,
+            )
         }
-        val workspace = response.data?.workspace
-        if (workspace == null) {
-            val messages = response.errors?.map { it.message }.orEmpty()
-            throw when {
-                messages.isNotEmpty() -> ApiException(messages.joinToString("\n"))
-                response.exception is ApolloNetworkException -> ApiException(HomeRepository.NETWORK_MESSAGE, response.exception)
-                else -> ApiException(response.exception?.message ?: "Something went wrong loading room availability.", response.exception)
-            }
-        }
-        return AvailabilityData(
-            timeFormat = when (workspace.me?.timeFormat) {
-                ApiTimeFormat.AmPm -> TimeFormat.AmPm
-                else -> TimeFormat.TwentyFourHour
-            },
-            rooms = buildRoomCards(
-                rooms = workspace.rooms.map { AvailabilityRoom(it.id, it.name, it.capacity, it.color.toRoomColor()) },
-                meetings = workspace.days.firstOrNull { it.date == date.toString() }?.meetings.orEmpty().map {
-                    AvailabilityMeeting(it.id, it.subject, it.startTime, it.endTime, it.room.id)
-                },
-            ),
-            bounds = DateBounds(
-                earliest = LocalDate.parse(workspace.boundaries.earliestRetainedDate),
-                latest = LocalDate.parse(workspace.boundaries.latestBookableDate),
-            ),
-        )
-    }
 
-    private fun ApiRoomColor?.toRoomColor(): RoomColor? =
-        this?.let { api -> RoomColor.entries.firstOrNull { it.name == api.rawValue } }
+    override fun retry() = store.retry()
 }
+
+/** What Room Availability shows for one day, from what the store holds. */
+fun availabilityData(reference: Reference, day: CachedDay): AvailabilityData = AvailabilityData(
+    timeFormat = reference.me?.timeFormat ?: TimeFormat.TwentyFourHour,
+    rooms = buildRoomCards(
+        rooms = reference.rooms.map { AvailabilityRoom(it.id, it.name, it.capacity, it.color) },
+        meetings = day.meetings.map { AvailabilityMeeting(it.id, it.subject, it.startTime, it.endTime, it.roomId) },
+    ),
+    bounds = reference.bounds?.let { DateBounds(it.earliest, it.latest) },
+)
