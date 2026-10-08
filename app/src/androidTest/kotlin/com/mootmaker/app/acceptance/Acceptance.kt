@@ -381,7 +381,7 @@ fun ComposeTestRule.screenText(): String = runCatching {
         }
         .filter { it.isNotBlank() }
         .joinToString(" / ")
-        .take(600)
+        .take(900)
 }.getOrElse { "(unreadable: ${it.message})" }
 
 /**
@@ -404,7 +404,8 @@ fun ComposeTestRule.scrollClearOfTheBottom(list: SemanticsMatcher, target: Seman
     try {
         onNode(list).performScrollToNode(target)
     } catch (missing: AssertionError) {
-        throw AssertionError("${missing.message}; on screen: ${screenText()}", missing)
+        // The screen first: a failure annotation keeps only the first line of the message.
+        throw AssertionError("Scrolled the list and never found the row; on screen: ${screenText()}", missing)
     }
     val container = onNode(list).fetchSemanticsNode()
     val node = onAllNodes(target).onFirst().fetchSemanticsNode()
