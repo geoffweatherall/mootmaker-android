@@ -27,6 +27,12 @@ environment is the definition of working**; the layers below it exist to fail so
 - **Every acceptance case makes what it needs** (rooms, people, meetings) with names unique to the
   run, through the real API, and checks the outcome there as well as on screen. Any account it
   signs up is deleted afterwards.
+- **The cache is tested at three layers.** `WorkspaceStoreTest` pins the store's rules with a fake
+  API whose every answer the test releases by hand, including the webapp's own invalidation
+  scenarios, translated. `CacheFlowTest` (Robolectric) proves "no spinner, no request" for what is
+  held, by counting `FakeBackend`'s requests exactly. `CacheAcceptanceTest` has another user change
+  what this one is viewing on a real environment, so the whole AppSync path is exercised
+  (use cases 144 to 149).
 - **Screenshots cover every screen in light and dark**, and the busiest screens at Android's largest
   font size, where text must wrap rather than clip. After an intended visual change, re-record with
   `./gradlew :app:recordRoborazziDebug` and commit the PNGs.

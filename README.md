@@ -41,6 +41,20 @@ PNGs.
 The GraphQL schema is downloaded at build time from the `@mootmaker/schema` npm package, pinned in
 `data/build.gradle.kts`. Emulator tests run only in GitHub Actions.
 
+## Caching and live updates
+
+Home, Meeting Details, Calendar and Room Availability draw from one in-memory store of what the app
+has seen (`data/.../cache/WorkspaceStore.kt`): the reference data (you, people, rooms, the bookable
+window), days, and meetings looked up by id. Going back to something seen shows it at once; the
+full spinner shows only for what the app has never held, and the slim bar while something shown is
+refetched. The AppSync `daysInvalidated` channel keeps it honest, by the webapp's rules: a named date
+goes stale and is refetched if shown, everything goes stale after a reconnect (which is what returning
+from the lock screen causes), and a response in flight when its date changed is fetched again. A
+resume refetches only what is shown and more than five minutes old. This device's own writes
+invalidate what they change, and signing out empties the store. The design, and why it is not
+Apollo's normalized cache, is
+[`designs/android-cache.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-cache.md).
+
 ## Configuration and environments
 
 The app reads `https://www.mootmaker.com/mobile-config.json` (production) or
