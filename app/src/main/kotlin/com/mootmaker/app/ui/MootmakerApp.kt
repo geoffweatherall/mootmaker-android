@@ -34,6 +34,12 @@ import com.mootmaker.app.AppContainer
 import com.mootmaker.app.BuildConfig
 import com.mootmaker.app.shareLink
 import com.mootmaker.app.ui.about.AboutScreen
+import com.mootmaker.app.ui.admin.PersonsActions
+import com.mootmaker.app.ui.admin.PersonsScreen
+import com.mootmaker.app.ui.admin.PersonsViewModel
+import com.mootmaker.app.ui.admin.RoomsActions
+import com.mootmaker.app.ui.admin.RoomsScreen
+import com.mootmaker.app.ui.admin.RoomsViewModel
 import com.mootmaker.app.ui.account.ForgotPasswordActions
 import com.mootmaker.app.ui.account.ForgotPasswordScreen
 import com.mootmaker.app.ui.account.ForgotPasswordViewModel
@@ -77,6 +83,8 @@ private object Routes {
     const val HOME = "home"
     const val ABOUT = "about"
     const val SETTINGS = "settings"
+    const val ROOMS = "admin/rooms"
+    const val PERSONS = "admin/persons"
     const val AVAILABILITY = "availability/{date}"
 
     const val ADD_MEETING = "meetings/add/{date}"
@@ -199,6 +207,9 @@ fun MootmakerApp(container: AppContainer) {
                     onRetry = viewModel::refresh,
                     onAbout = { navController.navigate(Routes.ABOUT) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
+                    isAdmin = claims?.isAdmin == true,
+                    onRooms = { navController.navigate(Routes.ROOMS) },
+                    onPersons = { navController.navigate(Routes.PERSONS) },
                     onSignOut = { scope.launch { session.signOut() } },
                     onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                     onRespond = viewModel::respond,
@@ -363,6 +374,52 @@ fun MootmakerApp(container: AppContainer) {
                     onAskToDelete = viewModel::askToDelete,
                     onKeepAccount = viewModel::keepAccount,
                     onConfirmDelete = viewModel::confirmDelete,
+                ),
+            )
+        }
+        composable(Routes.ROOMS) {
+            val viewModel = viewModel { RoomsViewModel(container.adminSource) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(viewModel) { viewModel.load() }
+            RoomsScreen(
+                state = state,
+                actions = RoomsActions(
+                    onBack = { navController.popBackStack() },
+                    onRetry = viewModel::load,
+                    onAdd = viewModel::startAdding,
+                    onEdit = viewModel::startEditing,
+                    onRemove = viewModel::askToRemove,
+                    onName = viewModel::setName,
+                    onCapacity = viewModel::setCapacity,
+                    onColor = viewModel::setColor,
+                    onSave = viewModel::save,
+                    onCloseEditor = viewModel::closeEditor,
+                    onConfirmRemove = viewModel::confirmRemove,
+                    onKeep = viewModel::keepRoom,
+                ),
+            )
+        }
+        composable(Routes.PERSONS) {
+            val viewModel = viewModel { PersonsViewModel(container.adminSource) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(viewModel) { viewModel.load() }
+            PersonsScreen(
+                state = state,
+                actions = PersonsActions(
+                    onBack = { navController.popBackStack() },
+                    onRetry = viewModel::load,
+                    onFilter = viewModel::setFilter,
+                    onAdd = viewModel::startAdding,
+                    onEdit = viewModel::startEditing,
+                    onRemove = viewModel::askToRemove,
+                    onName = viewModel::setName,
+                    onAdmin = viewModel::setAdmin,
+                    onSave = viewModel::save,
+                    onCloseEditor = viewModel::closeEditor,
+                    onRetrySync = viewModel::retrySync,
+                    onDismissSync = viewModel::dismissSyncFailure,
+                    onConfirmRemove = viewModel::confirmRemove,
+                    onKeep = viewModel::keepPerson,
                 ),
             )
         }

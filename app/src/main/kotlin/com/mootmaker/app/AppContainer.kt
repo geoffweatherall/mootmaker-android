@@ -8,6 +8,8 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.apollographql.apollo.network.okHttpClient
 import com.mootmaker.data.DataStoreKeyValueStore
 import com.mootmaker.data.KeyValueStore
+import com.mootmaker.data.api.AdminRepository
+import com.mootmaker.data.api.AdminSource
 import com.mootmaker.data.api.AvailabilityRepository
 import com.mootmaker.data.api.AvailabilitySource
 import com.mootmaker.data.api.CalendarRepository
@@ -82,6 +84,8 @@ class AppContainer(
     val meetingFormSource: MeetingFormSource = MeetingFormRepository(apollo = ::apolloClient, idToken = session::idToken)
 
     val settingsSource: SettingsSource = SettingsRepository(apollo = ::apolloClient, idToken = session::idToken, http = http)
+
+    val adminSource: AdminSource = AdminRepository(apollo = ::apolloClient, idToken = session::idToken)
 
     val calendarSource: CalendarSource = CalendarRepository(apollo = ::apolloClient, idToken = session::idToken)
 

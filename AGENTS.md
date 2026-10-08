@@ -2,7 +2,7 @@
 
 A native Android app — a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** M0 to M8 are built (M8: sign up, forgot password, delete account); M9 (admin) is next. The design is
+**Status:** M0 to M9 are built (M9: admin rooms and people); M10 (parity close-out) is next. The design is
 [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
 in the hub repository. Work one milestone at a time, as that document describes.
 

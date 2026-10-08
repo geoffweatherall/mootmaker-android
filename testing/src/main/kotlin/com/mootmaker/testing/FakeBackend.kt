@@ -24,7 +24,14 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 data class FakeRoom(val id: String, val name: String, val color: String? = null, val capacity: Int = 6)
 
-data class FakePerson(val id: String, val name: String, val avatarUrl: String? = null)
+/** [linkedEmails] is empty for a guest, someone an admin added who has not signed up. */
+data class FakePerson(
+    val id: String,
+    val name: String,
+    val avatarUrl: String? = null,
+    val isAdmin: Boolean = false,
+    val linkedEmails: List<String> = emptyList(),
+)
 
 data class FakeMeeting(
     val id: String,
@@ -73,6 +80,9 @@ class FakeBackend : Interceptor {
     /** A GraphQL error message to refuse `deleteMyAccount` with, as the API does for a reserved account. */
     var deleteAccountError: String? = null
     var accountDeleted = false
+
+    /** When true, setPersonAdmin applies the change but reports cognitoSyncFailed, as when Cognito is unreachable. */
+    var adminSyncFails = false
 
     var personId: String? = "person-1"
     var personName = "Pat Example"
@@ -222,6 +232,12 @@ class FakeBackend : Interceptor {
             "RequestAvatarUpload" -> return respond(chain, 200, requestAvatarUploadResponse(variables!!["contentType"]!!.jsonPrimitive.content))
             "ConfirmAvatarUpload" -> return respond(chain, 200, personResult("confirmAvatarUpload", personId?.also { avatarUrl = "https://$AVATAR_HOST/v1/$it/${uploadedBytes?.size ?: 0}.png" }))
             "RemoveAvatar" -> return respond(chain, 200, personResult("removeAvatar", personId?.also { avatarUrl = null }))
+            "CreateRoom", "UpdateRoom" -> return respond(chain, 200, saveRoomResponse(operation, (variables!!["id"] as? JsonPrimitive)?.content, variables["room"]!!.jsonObject))
+            "DeleteRoom" -> return respond(chain, 200, deleteRoomResponse(variables!!["id"]!!.jsonPrimitive.content))
+            "CreatePerson" -> return respond(chain, 200, createPersonResponse(variables!!["name"]!!.jsonPrimitive.content))
+            "RenamePerson" -> return respond(chain, 200, renamePersonResponse(variables!!["id"]!!.jsonPrimitive.content, variables["name"]!!.jsonPrimitive.content))
+            "SetPersonAdmin" -> return respond(chain, 200, setAdminResponse(variables!!["id"]!!.jsonPrimitive.content, variables["isAdmin"]!!.jsonPrimitive.content.toBoolean()))
+            "DeletePerson" -> return respond(chain, 200, deletePersonResponse(variables!!["id"]!!.jsonPrimitive.content))
             "DeleteMyAccount" -> return respond(chain, 200, deleteAccountResponse())
             "RespondToMeeting" -> return respond(chain, 200, respondResponse(variables!!["meetingId"]!!.jsonPrimitive.content, variables["status"]!!.jsonPrimitive.content))
         }
@@ -365,6 +381,106 @@ class FakeBackend : Interceptor {
         }
     }.toString()
 
+    private fun errorsJson(errors: List<String>) = buildJsonArray { errors.forEach { add(JsonPrimitive(it)) } }
+
+    /** Creates or edits a room as the API validates one: a name, and a capacity of at least 2. */
+    private fun saveRoomResponse(operation: String, id: String?, input: JsonObject): String {
+        val field = if (operation == "CreateRoom") "createRoom" else "updateRoom"
+        val name = input["name"]!!.jsonPrimitive.content.trim()
+        val capacity = input["capacity"]!!.jsonPrimitive.content.toInt()
+        val color = (input["color"] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content
+        val errors = buildList {
+            if (name.isEmpty()) add("NameRequired")
+            if (capacity < 2) add("CapacityTooLow")
+            if (id != null && rooms.none { it.id == id }) add("RoomNotFound")
+        }
+        var saved: FakeRoom? = null
+        if (errors.isEmpty()) {
+            saved = FakeRoom(id ?: "room-${rooms.size + 1}", name, color, capacity)
+            rooms = if (id == null) rooms + saved else rooms.map { if (it.id == id) saved else it }
+        }
+        return buildJsonObject {
+            putJsonObject("data") {
+                putJsonObject(field) {
+                    if (saved == null) put("room", JsonNull) else putJsonObject("room") { put("id", saved.id) }
+                    put("errors", errorsJson(errors))
+                }
+            }
+        }.toString()
+    }
+
+    /** Refuses a room with a meeting from today onward, as the API does. */
+    private fun deleteRoomResponse(id: String): String {
+        val today = LocalDate.now().toString()
+        val errors = when {
+            rooms.none { it.id == id } -> listOf("RoomNotFound")
+            meetings.any { it.roomId == id && it.startTime.take(10) >= today } -> listOf("RoomHasUpcomingMeetings")
+            else -> emptyList()
+        }
+        if (errors.isEmpty()) rooms = rooms.filter { it.id != id }
+        return buildJsonObject { putJsonObject("data") { putJsonObject("deleteRoom") { put("errors", errorsJson(errors)) } } }.toString()
+    }
+
+    private fun createPersonResponse(rawName: String): String {
+        val name = rawName.trim()
+        val errors = when {
+            name.isEmpty() -> listOf("NameRequired")
+            people.any { it.name.equals(name, ignoreCase = true) } -> listOf("NameAlreadyExists")
+            else -> emptyList()
+        }
+        val created = if (errors.isEmpty()) FakePerson("person-${people.size + 10}", name).also { otherPeople = otherPeople + it } else null
+        return personResult("createPerson", created?.id, errors)
+    }
+
+    private fun renamePersonResponse(id: String, rawName: String): String {
+        val name = rawName.trim()
+        val errors = when {
+            name.isEmpty() -> listOf("NameRequired")
+            people.none { it.id == id } -> listOf("PersonNotFound")
+            else -> emptyList()
+        }
+        if (errors.isEmpty()) {
+            if (id == personId) personName = name else otherPeople = otherPeople.map { if (it.id == id) it.copy(name = name) else it }
+        }
+        return personResult("renamePerson", id.takeIf { errors.isEmpty() }, errors)
+    }
+
+    private fun setAdminResponse(id: String, admin: Boolean): String {
+        val target = people.firstOrNull { it.id == id }
+        val errors = when {
+            target == null -> listOf("PersonNotFound")
+            id == personId && !admin -> listOf("CannotRevokeOwnAdminAccess")
+            target.linkedEmails.isEmpty() -> listOf("NoLinkedAccount")
+            else -> emptyList()
+        }
+        if (errors.isEmpty()) {
+            if (id == personId) isAdmin = admin else otherPeople = otherPeople.map { if (it.id == id) it.copy(isAdmin = admin) else it }
+        }
+        return buildJsonObject {
+            putJsonObject("data") {
+                putJsonObject("setPersonAdmin") {
+                    if (errors.isEmpty()) putJsonObject("person") { put("id", id) } else put("person", JsonNull)
+                    put("cognitoSyncFailed", errors.isEmpty() && adminSyncFails)
+                    put("errors", errorsJson(errors))
+                }
+            }
+        }.toString()
+    }
+
+    /** Deletes a person as the API does: their upcoming meetings go, and they leave the ones they attend. */
+    private fun deletePersonResponse(id: String): String {
+        val errors = when {
+            id == personId -> listOf("CannotDeleteSelf")
+            people.none { it.id == id } -> listOf("PersonNotFound")
+            else -> emptyList()
+        }
+        if (errors.isEmpty()) {
+            otherPeople = otherPeople.filter { it.id != id }
+            meetings = meetings.filter { it.organiserId != id }.map { it.copy(attendeeIds = it.attendeeIds - id) }
+        }
+        return buildJsonObject { putJsonObject("data") { putJsonObject("deletePerson") { put("errors", errorsJson(errors)) } } }.toString()
+    }
+
     /** A reserved account is refused with a GraphQL error, as the API refuses the demo user. */
     private fun deleteAccountResponse(): String = deleteAccountError?.let { message ->
         buildJsonObject {
@@ -411,8 +527,9 @@ class FakeBackend : Interceptor {
         }.toString()
     }
 
+    /** Everyone, the signed-in person first: their admin flag and linked email follow [isAdmin] and the demo email. */
     private val people: List<FakePerson>
-        get() = listOfNotNull(personId?.let { FakePerson(it, personName) }) + otherPeople
+        get() = listOfNotNull(personId?.let { FakePerson(it, personName, avatarUrl, isAdmin, listOfNotNull(demoEmail ?: "pat@example.com")) }) + otherPeople
 
     /** One answer shaped for every operation: Apollo reads only the fields each one selected. */
     private fun homeResponse(dates: List<String>, meetingId: String?, withMeeting: Boolean): String = buildJsonObject {
@@ -435,7 +552,22 @@ class FakeBackend : Interceptor {
                         put("avatarUrl", avatarUrl)
                     }
                 }
-                put("people", buildJsonArray { people.forEach { add(buildJsonObject { put("id", it.id); put("name", it.name) }) } })
+                put(
+                    "people",
+                    buildJsonArray {
+                        people.forEach { person ->
+                            add(
+                                buildJsonObject {
+                                    put("id", person.id)
+                                    put("name", person.name)
+                                    put("isAdmin", person.isAdmin)
+                                    put("linkedEmails", buildJsonArray { person.linkedEmails.forEach { add(JsonPrimitive(it)) } })
+                                    put("avatarUrl", person.avatarUrl)
+                                },
+                            )
+                        }
+                    },
+                )
                 put(
                     "rooms",
                     buildJsonArray {
