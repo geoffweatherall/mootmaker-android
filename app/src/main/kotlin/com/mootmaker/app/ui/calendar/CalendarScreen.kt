@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.calendar
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -87,7 +88,7 @@ fun CalendarScreen(state: CalendarState, actions: CalendarActions) {
             val data = state.data
             when {
                 data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
-                data == null -> Box(Modifier.fillMaxSize())
+                data == null -> FirstLoad()
                 data.people.isEmpty() -> Text(
                     "No people exist yet.",
                     style = MaterialTheme.typography.bodyLarge,

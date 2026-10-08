@@ -13,7 +13,13 @@ import org.junit.Rule
 import org.junit.Test
 import java.util.UUID
 
-/** Use cases B.7, B.9, B.10 and B.13 against a real environment. See [Acceptance]. */
+/**
+ * Use cases B.7, B.9, B.10, B.13 and B.15 against a real environment. See [Acceptance].
+ *
+ * B.14 (a protected page visited while signed out returns you there after signing in) has no
+ * Android counterpart: nothing outside the app can open one of its screens, so signed out, the app
+ * starts on sign-in and nothing behind it is reachable (B.13).
+ */
 class SignInAcceptanceTest {
     @get:Rule
     val compose = createEmptyComposeRule()
@@ -43,6 +49,29 @@ class SignInAcceptanceTest {
         // longer resumed, not necessarily destroyed.
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitUntil(10_000) { scenario.state != Lifecycle.State.RESUMED }
+    }
+
+    /** B.15: signed out, sign-up, forgot password and About each open, and lead back to sign-in. */
+    @Test
+    fun thePublicScreensOpenWhileSignedOut() {
+        scenario = Acceptance.launchApp()
+        compose.waitForText("Create an account")
+
+        compose.onNodeWithText("Create an account").performClick()
+        compose.waitForText("Already have an account?")
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForText("Forgot password?")
+
+        compose.onNodeWithText("Forgot password?").performClick()
+        compose.waitForText("Remembered it?")
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForText("About")
+
+        compose.onNodeWithText("About").performClick()
+        compose.waitForText("Mootmaker for Android")
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitForText("Create an account")
+        assertFalse(compose.shown("Home"))
     }
 
     /** B.9: a wrong password shows an error and doesn't sign in. */

@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -34,7 +35,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * Use cases L.89 to L.91, P.124 to P.131 and Q.132 to Q.142 against a real environment. See
+ * Use cases L.89 to L.91, M.98, P.124 to P.131 and Q.132 to Q.142 against a real environment. See
  * [Acceptance]. Every case works on rooms and people it names uniquely, and the one account it signs
  * up (for the cases that need a second linked account) is deleted afterwards.
  */
@@ -85,11 +86,11 @@ class AdminAcceptanceTest {
     /**
      * The row control for [description] ("Edit X", "Remove X"), scrolled into view in the list first.
      * The list is found by its scroll-to-index action, not any scroll action: a filter holding a long
-     * email overflows its single line and becomes scrollable too.
+     * email overflows its single line and becomes scrollable too. The row is scrolled clear of the
+     * Add button, which would otherwise take a tap on a row at the bottom of the screen.
      */
     private fun rowAction(description: String): SemanticsNodeInteraction {
-        compose.waitUntil(30_000) { compose.onAllNodes(hasScrollToIndexAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription(description))
+        compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasContentDescription(description))
         return compose.onNode(hasContentDescription(description))
     }
 
@@ -183,6 +184,36 @@ class AdminAcceptanceTest {
         compose.waitForText("Manage the rooms available for booking.")
         compose.waitUntil(30_000) { admin.roomNames().contains("$name renamed") }
         assertEquals("Z-Room $run renamed", admin.subjectsRoomOn(tomorrow.toString(), "Big $run"))
+    }
+
+    /** M.98: a room renamed on Rooms reads with its new name on home and room availability, with no refresh. */
+    @Test
+    fun aRenamedRoomIsRenamedEverywhere() {
+        val name = "Z-Cache $run"
+        val room = admin.createRoom(name)
+        val today = LocalDate.now()
+        admin.createMeeting(room, admin.myPersonId(), "Cached $run", "${today}T07:00:00", "${today}T07:30:00")
+        openAdmin("Rooms")
+
+        rowAction("Edit $name").performClick()
+        compose.waitForText("Edit room")
+        compose.onNode(hasText(name) and hasSetTextAction()).performTextReplacement("$name renamed")
+        save()
+        compose.waitForText("Manage the rooms available for booking.")
+        compose.waitForText("$name renamed")
+
+        compose.onNodeWithContentDescription("Back").performClick()
+        // Rooms' list must be gone first: while it leaves, it is a second scrollable list on screen.
+        compose.waitUntil(30_000) { !compose.shown("Manage the rooms available for booking.") }
+        // Home's agenda row names the meeting's room after its time, and only by the new name.
+        compose.scrollHomeTo(hasText("· $name renamed", substring = true))
+        assertFalse(compose.onAllNodes(hasText("· $name", substring = true) and !hasText("renamed", substring = true)).fetchSemanticsNodes().isNotEmpty())
+        // Back up to the top of home's lazy list, where the agenda scroll left Rooms today uncomposed.
+        compose.scrollClearOfTheBottom(hasScrollAction(), hasText("Rooms today") and hasClickAction())
+        compose.onNode(hasText("Rooms today") and hasClickAction()).performClick()
+        compose.waitForText("Room availability")
+        compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasText("$name renamed"))
+        assertFalse(compose.shown(name))
     }
 
     /** P.126 and P.127: a blank name and a capacity of 1 are refused, in the API's words. */

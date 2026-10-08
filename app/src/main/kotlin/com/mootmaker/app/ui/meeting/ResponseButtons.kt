@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mootmaker.data.meeting.AttendeeStatus
 
@@ -19,7 +20,8 @@ private val answers = listOf(AttendeeStatus.Going, AttendeeStatus.Maybe, Attende
 
 /**
  * Going / Maybe / Not going. [selected] is the answer already given (shown filled), or null when
- * there is none yet. Tapping the answer already given does nothing.
+ * there is none yet. Tapping the answer already given does nothing. At a large font size a label
+ * wraps onto a second line rather than being cut off.
  */
 @Composable
 fun ResponseButtons(
@@ -38,11 +40,11 @@ fun ResponseButtons(
             val contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
             if (answer == selected) {
                 FilledTonalButton(onClick = {}, enabled = enabled, modifier = buttonModifier, contentPadding = contentPadding) {
-                    Text(answer.label, maxLines = 1)
+                    Text(answer.label, textAlign = TextAlign.Center)
                 }
             } else {
                 OutlinedButton(onClick = { onRespond(answer) }, enabled = enabled, modifier = buttonModifier, contentPadding = contentPadding) {
-                    Text(answer.label, maxLines = 1)
+                    Text(answer.label, textAlign = TextAlign.Center)
                 }
             }
         }

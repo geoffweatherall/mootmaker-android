@@ -130,6 +130,23 @@ class AdminFlowTest {
         assertEquals("Board Room", backend.rooms.first { it.id == "room-1" }.name)
     }
 
+    // M.98: back on home, a meeting's row reads the room's new name, with nothing refreshed by hand.
+    @Test
+    fun aRenamedRoomReadsRenamedOnHome() {
+        backend.meetings = listOf(FakeBackend.meeting("m1", "Planning", LocalDate.now(), 7, roomId = "room-1"))
+        open("Rooms")
+        compose.onNodeWithContentDescription("Edit Boardroom").performClick()
+        waitForText("Edit room")
+        compose.onNode(hasText("Boardroom") and hasSetTextAction()).performTextReplacement("Board Room")
+        compose.onNode(hasText("Save") and hasClickAction()).performClick()
+        waitForText("Manage the rooms available for booking.")
+        waitForText("Board Room")
+
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("· Board Room", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(compose.onAllNodes(hasText("· Boardroom", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
+
     // P.130 and P.131: a room with no upcoming meeting goes; one with an upcoming meeting is refused.
     @Test
     fun removingARoomWithUpcomingMeetingsIsRefused() {

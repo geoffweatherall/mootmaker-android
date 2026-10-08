@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.addmeeting
 
+import com.mootmaker.app.ui.FirstLoad
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,7 +105,7 @@ fun AddMeetingScreen(state: AddMeetingState, actions: AddMeetingActions) {
                     Text(state.loadError, color = MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick = actions.onRetry) { Text("Try again") }
                 }
-                else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                else -> FirstLoad()
             }
         }
     }

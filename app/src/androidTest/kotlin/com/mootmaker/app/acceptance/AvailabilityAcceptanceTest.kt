@@ -1,5 +1,6 @@
 package com.mootmaker.app.acceptance
 
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -17,7 +18,7 @@ import java.time.LocalTime
 import java.util.UUID
 
 /**
- * Use cases D.25 and E.26 to E.34 against a real environment. See [Acceptance].
+ * Use cases D.25, E.26 to E.34, E.37 and N.106 against a real environment. See [Acceptance].
  *
  * Every case creates its own uniquely named rooms through the real API, so the cases are
  * independent of each other and of whatever else the environment holds. Room names start with
@@ -100,5 +101,47 @@ class AvailabilityAcceptanceTest {
         compose.onNodeWithContentDescription("Previous day").performClick()
         compose.waitForText("A-Days $run")
         compose.waitUntil(30_000) { compose.shown("Free all day") }
+    }
+
+    /** E.37: Add meeting from a day other than today opens the form on that day, not today. */
+    @Test
+    fun addMeetingFromAnotherDayStartsOnThatDay() {
+        val viewed = LocalDate.now().plusDays(3)
+        openAvailabilityAsAdmin()
+        repeat(3) { compose.onNodeWithContentDescription("Next day").performClick() }
+        compose.onNodeWithContentDescription("Add meeting").performClick()
+
+        compose.waitForText("Organiser")
+        compose.waitForText("$viewed")
+    }
+
+    /** N.106: the times in a room's opened meeting list follow your time format. */
+    @Test
+    fun aRoomsMeetingTimesFollowYourFormat() {
+        val run = UUID.randomUUID().toString().take(6)
+        val api = Api(Acceptance.admin)
+        // Not an "A-" name: those sort to the top, where the other cases expect only their own rooms.
+        val name = "Z-Format $run"
+        val room = api.createRoom(name)
+        val tomorrow = LocalDate.now().plusDays(1)
+        api.createMeeting(room, api.myPersonId(), "Twelve hour $run", "${tomorrow}T09:00:00", "${tomorrow}T10:00:00")
+        val original = api.preferences().split("/")
+        api.setPreferences(original[0], "AmPm", original[2])
+        try {
+            openAvailabilityAsAdmin()
+            compose.onNodeWithContentDescription("Next day").performClick()
+            compose.waitForTextContaining("See tomorrow's meetings")
+            compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasText(name))
+            // Every card has a toggle with the same words; this room's is the first one below its name.
+            val title = compose.onNode(hasText(name)).fetchSemanticsNode().positionInRoot.y
+            val toggles = compose.onAllNodes(hasText("See tomorrow's meetings (1)")).fetchSemanticsNodes()
+            val mine = toggles.filter { it.positionInRoot.y > title }.minBy { it.positionInRoot.y }
+            compose.onAllNodes(hasText("See tomorrow's meetings (1)"))[toggles.indexOf(mine)].performClick()
+
+            compose.waitForText("Twelve hour $run")
+            compose.waitForTextContaining("09:00 AM–10:00 AM")
+        } finally {
+            api.setPreferences(original[0], original[1], original[2])
+        }
     }
 }

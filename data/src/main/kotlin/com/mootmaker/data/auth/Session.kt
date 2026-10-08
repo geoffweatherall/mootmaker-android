@@ -51,6 +51,11 @@ class Session(
     private val _state = MutableStateFlow<SessionState>(SessionState.Starting)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
+    private val _expired = MutableStateFlow(false)
+
+    /** True after a refused refresh signed the user out, until they next sign in (use case M.94). */
+    val expired: StateFlow<Boolean> = _expired.asStateFlow()
+
     private val tokenLock = Mutex()
     private var tokens: Tokens? = null
 
@@ -89,6 +94,7 @@ class Session(
             tokens = signedIn
             tokenStore.save(signedIn)
         }
+        _expired.value = false
         _state.value = SessionState.SignedIn(IdTokenClaims.parse(signedIn.idToken))
     }
 
@@ -133,6 +139,7 @@ class Session(
     /** Switching environment signs out: tokens belong to one environment's user pool. */
     suspend fun switchEnvironment(environment: Environment) {
         signOut()
+        _expired.value = false
         configRepository.setEnvironment(environment)
         loadConfig(environment)
     }
@@ -158,6 +165,7 @@ class Session(
             }
         }
         if (refreshed == null) {
+            _expired.value = true
             signOut()
             throw SessionExpiredException()
         }

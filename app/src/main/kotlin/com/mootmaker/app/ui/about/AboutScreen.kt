@@ -63,7 +63,7 @@ fun AboutScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Mootmaker for Android", style = MaterialTheme.typography.titleLarge)
-            Text("Book rooms and meetings. A preview: features this app doesn't have yet open the website.")
+            Text("Book rooms and meetings, with the same account and data as the website.")
             Text(
                 "Version $versionName ($versionCode)",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -19,8 +19,11 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import java.io.IOException
+import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 data class FakeRoom(val id: String, val name: String, val color: String? = null, val capacity: Int = 6)
 
@@ -60,6 +63,16 @@ class FakeBackend : Interceptor {
     var demoPassword: String? = "demo-password"
     var configAvailable = true
     var networkDown = false
+
+    /** When the id tokens it issues expire; within five minutes of now, every API call refreshes first. */
+    var idTokenExpiresAt: Instant = Instant.parse("2030-01-01T00:00:00Z")
+
+    /** While set, GraphQL requests wait for it to open, so a test can see a screen mid-load. */
+    @Volatile
+    var holdGraphql: CountDownLatch? = null
+
+    /** Refuses refresh-token sign-ins, as Cognito does once the refresh token has expired or been revoked. */
+    var refreshRefused = false
 
     /** A Cognito error type to fail the password check with, e.g. "NotAuthorizedException". */
     var signInError: Pair<String, String>? = null
@@ -165,7 +178,11 @@ class FakeBackend : Interceptor {
         val json = Json.parseToJsonElement(body).jsonObject
         return when (action) {
             "InitiateAuth" -> if (json["AuthFlow"]?.jsonPrimitive?.content == "REFRESH_TOKEN_AUTH") {
-                respond(chain, 200, authResult(includeRefresh = false))
+                if (refreshRefused) {
+                    cognitoError(chain, "NotAuthorizedException", "Refresh Token has expired")
+                } else {
+                    respond(chain, 200, authResult(includeRefresh = false))
+                }
             } else {
                 respond(
                     chain,
@@ -208,7 +225,7 @@ class FakeBackend : Interceptor {
 
     private fun authResult(includeRefresh: Boolean): String = buildJsonObject {
         putJsonObject("AuthenticationResult") {
-            put("IdToken", fakeIdToken(email = demoEmail ?: "pat@example.com", name = personName, personId = personId, admin = isAdmin))
+            put("IdToken", fakeIdToken(email = demoEmail ?: "pat@example.com", name = personName, personId = personId, expiresAt = idTokenExpiresAt, admin = isAdmin))
             put("AccessToken", "fake-access-token")
             if (includeRefresh) put("RefreshToken", "fake-refresh-token")
         }
@@ -217,6 +234,7 @@ class FakeBackend : Interceptor {
     private fun graphql(chain: Interceptor.Chain, body: String): Response {
         val request = Json.parseToJsonElement(body).jsonObject
         val operation = request["operationName"]?.jsonPrimitive?.content
+        holdGraphql?.await(10, TimeUnit.SECONDS)
         requests += "graphql $operation"
         if (chain.request().header("Authorization").isNullOrBlank()) {
             return respond(chain, 401, """{"errors":[{"errorType":"UnauthorizedException","message":"You are not authorized to make this call."}]}""")

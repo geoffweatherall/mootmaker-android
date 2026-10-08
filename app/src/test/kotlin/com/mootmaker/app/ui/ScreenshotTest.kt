@@ -1,6 +1,11 @@
 package com.mootmaker.app.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.Density
+import com.mootmaker.app.ui.about.AboutScreen
+import com.mootmaker.data.config.Environment
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.mootmaker.app.ui.admin.PersonEditor
@@ -69,8 +74,53 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("src/test/screenshots/$name.png")
     }
 
+    /**
+     * [capture] at Android's largest font size (200%), for the accessibility pass: text wraps and
+     * scrolls rather than clipping or overlapping.
+     */
+    private fun captureLargeFont(name: String, content: @androidx.compose.runtime.Composable () -> Unit) {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                MootmakerTheme { content() }
+            }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/$name.png")
+    }
+
     @Test
     fun signIn() = capture("sign-in") {
+        SignInScreen(
+            state = SignInState(email = "demo@mootmaker.com", password = "demo-password"),
+            config = SignInConfig.Ready(hasDemoUser = true),
+            onEmailChange = {}, onPasswordChange = {}, onSubmit = {}, onRetryConfig = {},
+            onCreateAccount = {}, onForgotPassword = {}, onAbout = {},
+        )
+    }
+
+    @Test
+    fun signInDark() = capture("sign-in-dark", dark = true) {
+        SignInScreen(
+            state = SignInState(email = "demo@mootmaker.com", password = "demo-password"),
+            config = SignInConfig.Ready(hasDemoUser = true),
+            onEmailChange = {}, onPasswordChange = {}, onSubmit = {}, onRetryConfig = {},
+            onCreateAccount = {}, onForgotPassword = {}, onAbout = {},
+        )
+    }
+
+    @Test
+    fun signInAfterExpiry() = capture("sign-in-expired") {
+        SignInScreen(
+            state = SignInState(),
+            config = SignInConfig.Ready(hasDemoUser = false),
+            onEmailChange = {}, onPasswordChange = {}, onSubmit = {}, onRetryConfig = {},
+            onCreateAccount = {}, onForgotPassword = {}, onAbout = {},
+            sessionExpired = true,
+        )
+    }
+
+    @Test
+    fun signInLargeFont() = captureLargeFont("sign-in-large-font") {
         SignInScreen(
             state = SignInState(email = "demo@mootmaker.com", password = "demo-password"),
             config = SignInConfig.Ready(hasDemoUser = true),
@@ -97,6 +147,16 @@ class ScreenshotTest {
     @Test
     fun homeWithMeetingsDark() = capture("home-dark", dark = true) {
         HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
+    }
+
+    @Test
+    fun homeLargeFont() = captureLargeFont("home-large-font") {
+        HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
+    }
+
+    @Test
+    fun homeFirstLoad() = capture("home-first-load") {
+        HomeScreen(HomeState(TODAY, null, loading = true), null, NO_ACTIONS)
     }
 
     @Test
@@ -127,6 +187,16 @@ class ScreenshotTest {
     @Test
     fun meetingDetailsDark() = capture("meeting-details-dark", dark = true) {
         MeetingDetailsScreen(meetingState(SAMPLE_MEETING), NO_MEETING_ACTIONS)
+    }
+
+    @Test
+    fun meetingDetailsLargeFont() = captureLargeFont("meeting-details-large-font") {
+        MeetingDetailsScreen(meetingState(SAMPLE_MEETING), NO_MEETING_ACTIONS)
+    }
+
+    @Test
+    fun availabilityLargeFont() = captureLargeFont("availability-large-font") {
+        AvailabilityScreen(SAMPLE_AVAILABILITY, NO_AVAILABILITY_ACTIONS)
     }
 
     @Test
@@ -168,6 +238,11 @@ class ScreenshotTest {
 
     @Test
     fun addMeetingDark() = capture("add-meeting-dark", dark = true) {
+        AddMeetingScreen(filledForm, noFormActions)
+    }
+
+    @Test
+    fun addMeetingLargeFont() = captureLargeFont("add-meeting-large-font") {
         AddMeetingScreen(filledForm, noFormActions)
     }
 
@@ -274,6 +349,11 @@ class ScreenshotTest {
     }
 
     @Test
+    fun roomEditorDark() = capture("admin-room-editor-dark", dark = true) {
+        RoomsScreen(RoomsState(rooms = adminRooms, loaded = true, editor = RoomEditor("r1", "Atrium", "16", RoomColor.Green)), noRoomsActions)
+    }
+
+    @Test
     fun persons() = capture("admin-persons") {
         PersonsScreen(PersonsState(people = adminPeople, loaded = true), noPersonsActions)
     }
@@ -289,7 +369,22 @@ class ScreenshotTest {
     }
 
     @Test
+    fun personEditorDark() = capture("admin-person-editor-dark", dark = true) {
+        PersonsScreen(PersonsState(people = adminPeople, loaded = true, editor = PersonEditor(adminPeople[2], "Sam Other", isAdmin = true)), noPersonsActions)
+    }
+
+    @Test
     fun personEditorGuest() = capture("admin-person-editor-guest") {
         PersonsScreen(PersonsState(people = adminPeople, loaded = true, editor = PersonEditor(adminPeople[1], "Guest Gale", isAdmin = false)), noPersonsActions)
+    }
+
+    @Test
+    fun about() = capture("about") {
+        AboutScreen("5.10.8", 51008, Environment.PRODUCTION, onSwitchEnvironment = {}, onBack = {})
+    }
+
+    @Test
+    fun aboutDark() = capture("about-dark", dark = true) {
+        AboutScreen("5.10.8", 51008, Environment("test"), onSwitchEnvironment = {}, onBack = {})
     }
 }
