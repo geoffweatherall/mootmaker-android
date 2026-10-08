@@ -1,6 +1,8 @@
 package com.mootmaker.app.acceptance
 
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -49,10 +51,19 @@ class AccountAcceptanceTest {
     private val cognito by lazy { CognitoClient(Acceptance.http, Acceptance.config.userPoolId, Acceptance.config.androidClientId) }
 
     /**
-     * Scrolled into view first: once a field has focus the keyboard covers the bottom of these forms,
-     * and a tap on a button under it lands on the keyboard instead.
+     * The form's button, scrolled into view with the keyboard closed first. A tap is injected through the window
+     * manager, so with the keyboard up it can land on the keyboard, or, as the form re-lays out when
+     * the keyboard goes, on the Sign in link below the button (a release-bound run once found itself
+     * back on sign-in after Reset password).
      */
-    private fun button(text: String) = compose.onNode(hasText(text) and hasClickAction()).performScrollTo()
+    private fun button(text: String): SemanticsNodeInteraction {
+        scenario?.onActivity { activity ->
+            activity.getSystemService(InputMethodManager::class.java)
+                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+        compose.waitForIdle()
+        return compose.onNode(hasText(text) and hasClickAction()).performScrollTo()
+    }
 
     private fun startSignUp(identity: EmailHelper.Identity) {
         scenario = Acceptance.launchApp()
