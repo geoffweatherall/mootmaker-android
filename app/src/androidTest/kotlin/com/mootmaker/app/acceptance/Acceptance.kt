@@ -400,13 +400,15 @@ fun ComposeTestRule.scrollHomeTo(matcher: SemanticsMatcher) {
  * button, so a tap meant for it lands on something else.
  */
 fun ComposeTestRule.scrollClearOfTheBottom(list: SemanticsMatcher, target: SemanticsMatcher) {
-    waitUntil(TIMEOUT_MS) { onAllNodes(list).fetchSemanticsNodes().isNotEmpty() }
-    try {
-        onNode(list).performScrollToNode(target)
-    } catch (missing: AssertionError) {
-        // The screen first: a failure annotation keeps only the first line of the message.
-        throw AssertionError("Scrolled the list and never found the row; on screen: ${screenText()}", missing)
-    }
+    // Retried until it is found: a screen that reloads on return keeps its old rows on screen until
+    // the new ones arrive, so the row may not be there on the first look.
+    val found = runCatching {
+        waitUntil(TIMEOUT_MS) {
+            onAllNodes(list).fetchSemanticsNodes().isNotEmpty() &&
+                runCatching { onNode(list).performScrollToNode(target) }.isSuccess
+        }
+    }.isSuccess
+    if (!found) throw AssertionError("Scrolled the list for ${TIMEOUT_MS / 1000}s and never found the row; on screen: ${screenText()}")
     val container = onNode(list).fetchSemanticsNode()
     val node = onAllNodes(target).onFirst().fetchSemanticsNode()
     val limit = container.positionInRoot.y + container.size.height * 2 / 3f
