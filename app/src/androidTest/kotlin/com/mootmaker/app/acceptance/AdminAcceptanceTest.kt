@@ -86,11 +86,11 @@ class AdminAcceptanceTest {
     /**
      * The row control for [description] ("Edit X", "Remove X"), scrolled into view in the list first.
      * The list is found by its scroll-to-index action, not any scroll action: a filter holding a long
-     * email overflows its single line and becomes scrollable too.
+     * email overflows its single line and becomes scrollable too. The row is scrolled clear of the
+     * Add button, which would otherwise take a tap on a row at the bottom of the screen.
      */
     private fun rowAction(description: String): SemanticsNodeInteraction {
-        compose.waitUntil(30_000) { compose.onAllNodes(hasScrollToIndexAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription(description))
+        compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasContentDescription(description))
         return compose.onNode(hasContentDescription(description))
     }
 
@@ -203,12 +203,14 @@ class AdminAcceptanceTest {
         compose.waitForText("$name renamed")
 
         compose.onNodeWithContentDescription("Back").performClick()
+        // Rooms' list must be gone first: while it leaves, it is a second scrollable list on screen.
+        compose.waitUntil(30_000) { !compose.shown("Manage the rooms available for booking.") }
         // Home's agenda row names the meeting's room after its time, and only by the new name.
         compose.scrollHomeTo(hasText("· $name renamed", substring = true))
         assertFalse(compose.onAllNodes(hasText("· $name", substring = true) and !hasText("renamed", substring = true)).fetchSemanticsNodes().isNotEmpty())
         compose.onNodeWithText("Rooms today").performScrollTo().performClick()
         compose.waitForText("Room availability")
-        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("$name renamed"))
+        compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasText("$name renamed"))
         assertFalse(compose.shown(name))
     }
 

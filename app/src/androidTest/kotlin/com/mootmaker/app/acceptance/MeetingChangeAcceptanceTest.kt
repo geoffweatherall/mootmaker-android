@@ -61,9 +61,8 @@ class MeetingChangeAcceptanceTest {
         waitForTextContaining("Attendees")
     }
 
-    private fun waitForTextContaining(text: String) = compose.waitUntil(30_000) {
-        compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-    }
+    // The shared helper, which says what was on screen when it times out.
+    private fun waitForTextContaining(text: String) = compose.waitForTextContaining(text)
 
     /** D.107: an unanswered invitation has one-tap answers on home, and answering clears it from the list. */
     @Test

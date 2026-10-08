@@ -53,6 +53,8 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performScrollTo
 
 /**
@@ -388,7 +390,28 @@ fun ComposeTestRule.screenText(): String = runCatching {
  */
 fun ComposeTestRule.scrollHomeTo(matcher: SemanticsMatcher) {
     waitForText("Needs your response")
-    onNode(hasScrollAction()).performScrollToNode(matcher)
+    scrollClearOfTheBottom(hasScrollAction(), matcher)
+}
+
+/**
+ * Scrolls the lazy [list] until a node matching [target] is composed, then on until that node sits
+ * in the upper two thirds of the list. performScrollToNode alone stops as soon as the node is
+ * composed, which can leave it at the bottom edge: partly outside the list, or under a floating
+ * button, so a tap meant for it lands on something else.
+ */
+fun ComposeTestRule.scrollClearOfTheBottom(list: SemanticsMatcher, target: SemanticsMatcher) {
+    waitUntil(TIMEOUT_MS) { onAllNodes(list).fetchSemanticsNodes().isNotEmpty() }
+    try {
+        onNode(list).performScrollToNode(target)
+    } catch (missing: AssertionError) {
+        throw AssertionError("${missing.message}; on screen: ${screenText()}", missing)
+    }
+    val container = onNode(list).fetchSemanticsNode()
+    val node = onAllNodes(target).onFirst().fetchSemanticsNode()
+    val limit = container.positionInRoot.y + container.size.height * 2 / 3f
+    val overshoot = node.positionInRoot.y + node.size.height - limit
+    if (overshoot > 0) onNode(list).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, overshoot) }
+    waitForIdle()
 }
 
 fun ComposeTestRule.field(label: String): SemanticsNodeInteraction = onNode(hasText(label) and hasSetTextAction())

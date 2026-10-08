@@ -1,5 +1,6 @@
 package com.mootmaker.app.acceptance
 
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -119,8 +120,9 @@ class AvailabilityAcceptanceTest {
     fun aRoomsMeetingTimesFollowYourFormat() {
         val run = UUID.randomUUID().toString().take(6)
         val api = Api(Acceptance.admin)
-        // "A-0" sorts ahead of the other cases' rooms, so this is the first card with a meeting that day.
-        val room = api.createRoom("A-0 Format $run")
+        // Not an "A-" name: those sort to the top, where the other cases expect only their own rooms.
+        val name = "Z-Format $run"
+        val room = api.createRoom(name)
         val tomorrow = LocalDate.now().plusDays(1)
         api.createMeeting(room, api.myPersonId(), "Twelve hour $run", "${tomorrow}T09:00:00", "${tomorrow}T10:00:00")
         val original = api.preferences().split("/")
@@ -128,8 +130,13 @@ class AvailabilityAcceptanceTest {
         try {
             openAvailabilityAsAdmin()
             compose.onNodeWithContentDescription("Next day").performClick()
-            compose.waitForText("A-0 Format $run")
-            compose.onAllNodesWithTextFirst("See tomorrow's meetings (1)").performClick()
+            compose.waitForTextContaining("See tomorrow's meetings")
+            compose.scrollClearOfTheBottom(hasScrollToIndexAction(), hasText(name))
+            // Every card has a toggle with the same words; this room's is the first one below its name.
+            val title = compose.onNode(hasText(name)).fetchSemanticsNode().positionInRoot.y
+            val toggles = compose.onAllNodes(hasText("See tomorrow's meetings (1)")).fetchSemanticsNodes()
+            val mine = toggles.filter { it.positionInRoot.y > title }.minBy { it.positionInRoot.y }
+            compose.onAllNodes(hasText("See tomorrow's meetings (1)"))[toggles.indexOf(mine)].performClick()
 
             compose.waitForText("Twelve hour $run")
             compose.waitForTextContaining("09:00 AM–10:00 AM")
