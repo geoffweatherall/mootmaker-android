@@ -2,10 +2,12 @@
 
 A native Android app, a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** milestones M0 to M9 are built: sign up, sign in and reset your password; your agenda,
-room availability, meeting details and person calendars; add, edit, cancel and respond to meetings,
-with live updates; settings, avatars and deleting your account; and, for admins, managing rooms and
-people. M10 (parity close-out) is next. The plan is [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
+**Status:** at parity with the webapp: every milestone, M0 to M10, is built. Sign up, sign in and
+reset your password; your agenda, room availability, meeting details and person calendars; add,
+edit, cancel and respond to meetings, with live updates; settings, avatars and deleting your
+account; and, for admins, managing rooms and people. Each release attaches the signed APK to its
+[mootmaker-release GitHub Release](https://github.com/geoffweatherall/mootmaker-release/releases/latest).
+The plan was [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
 in the hub repository.
 
 ## Layout
@@ -21,6 +23,7 @@ in the hub repository.
 | `.github/workflows/release-build.yml` | Called by mootmaker-release's `release.yml`: builds and signs the release APK once, runs the acceptance suite and then `smoke/sign-up-lifecycle.yaml` against it in a fresh ephemeral environment, uploads it |
 | `.github/workflows/smoke.yml` | Called by `release.yml`: a Maestro flow with the release APK against a named environment. Production gets the read-only demo sign-in (`smoke/demo-sign-in.yaml`); test gets sign up with a real code, use, delete account (`smoke/sign-up-lifecycle.yaml`) |
 | `app/src/androidTest/.../acceptance/` | The acceptance suite, by use case, against a real environment's fixture users and, for sign-up and reset, real emailed codes. Excluded from pr-checks |
+| `testing-strategy.md` | The test layers, what goes in each, and how failures reach a cloud session |
 | `email-helper/` | A small Node server the workflows start on the runner: it hands real Cognito codes from `mootmaker-email-testing`'s queue to the emulator (through `adb reverse tcp:8787 tcp:8787`) and to Maestro |
 
 ## Building

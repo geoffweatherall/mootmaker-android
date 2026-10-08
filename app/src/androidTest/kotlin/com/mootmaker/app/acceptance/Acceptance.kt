@@ -43,6 +43,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import java.util.Locale
+import java.time.chrono.IsoChronology
+import java.time.format.FormatStyle
+import java.time.format.DateTimeFormatterBuilder
+import java.time.format.DateTimeFormatter
+import java.time.LocalDate
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.performScrollTo
 
 /**
  * Acceptance tests run against a real ephemeral environment, created for the run by
@@ -306,6 +317,22 @@ class Api(private val account: Acceptance.Account) {
     )["workspace"]!!.jsonObject["days"]!!.jsonArray.flatMap { it.jsonObject["meetings"]!!.jsonArray }
         .map { it.jsonObject }.firstOrNull { it.string("subject") == subject }?.get("room")?.jsonObject?.string("name")
 
+    /** The start and end the API holds for the meeting called [subject] on [date], or null if there is none. */
+    fun timesOn(date: String, subject: String): Pair<String, String>? = query(
+        "query(\$d: [String!]) { workspace(dates: \$d) { days { meetings { subject startTime endTime } } } }",
+        buildJsonObject { put("d", JsonArray(listOf(JsonPrimitive(date)))) },
+    )["workspace"]!!.jsonObject["days"]!!.jsonArray.flatMap { it.jsonObject["meetings"]!!.jsonArray }
+        .map { it.jsonObject }.firstOrNull { it.string("subject") == subject }?.let { it.string("startTime") to it.string("endTime") }
+
+    /** Renames a room, keeping its capacity. */
+    fun renameRoom(id: String, name: String, capacity: Int = 6) {
+        val result = query(
+            "mutation(\$id: ID!, \$room: RoomInput!) { updateRoom(id: \$id, room: \$room) { room { id } errors } }",
+            buildJsonObject { put("id", id); put("room", buildJsonObject { put("name", name); put("capacity", capacity) }) },
+        )["updateRoom"]!!.jsonObject
+        checkNoErrors(result)
+    }
+
     /** Deletes the caller's own account. Tests that create an account use it to leave nothing behind. */
     fun deleteMyAccount() {
         check(query("mutation { deleteMyAccount }")["deleteMyAccount"]!!.jsonPrimitive.content == "true") { "deleteMyAccount returned false" }
@@ -374,4 +401,37 @@ fun ComposeTestRule.signIn(account: Acceptance.Account) {
     field("Email").performTextReplacement(account.email)
     field("Password").performTextReplacement(account.password)
     onNode(hasText("Sign in") and hasClickAction()).performClick()
+}
+
+/**
+ * The meeting form: opens the menu under the [field] labelled so ("Start time", "Room") and picks
+ * [option] from it. The option is looked for in the menu's popup, so a field already showing the
+ * same text is never the one tapped.
+ */
+fun ComposeTestRule.pickFromMenu(field: String, option: String) {
+    onNode(hasText(field) and hasClickAction()).performScrollTo().performClick()
+    val inMenu = hasText(option) and hasClickAction() and hasAnyAncestor(isPopup())
+    waitUntil(TIMEOUT_MS) { onAllNodes(inMenu).fetchSemanticsNodes().isNotEmpty() }
+    onNode(inMenu).performScrollTo().performClick()
+}
+
+/**
+ * The meeting form: sets the Date field to [date] by typing it into the date picker's text mode, in
+ * the device locale's numeric order (MMddyyyy for en-US), which is what that mode expects.
+ */
+fun ComposeTestRule.pickDate(date: LocalDate) {
+    onNode(hasText("Date") and hasClickAction()).performScrollTo().performClick()
+    waitUntil(TIMEOUT_MS) { onAllNodes(hasContentDescription("Switch to text input mode")).fetchSemanticsNodes().isNotEmpty() }
+    onNode(hasContentDescription("Switch to text input mode")).performClick()
+    val input = hasSetTextAction() and hasAnyAncestor(isDialog())
+    waitUntil(TIMEOUT_MS) { onAllNodes(input).fetchSemanticsNodes().isNotEmpty() }
+    onNode(input).performTextReplacement(date.format(DateTimeFormatter.ofPattern(datePickerDigits())))
+    onNode(hasText("OK") and hasClickAction()).performClick()
+}
+
+/** The locale's short date pattern as the picker's text mode takes it: digits only, four-digit year. */
+private fun datePickerDigits(): String {
+    val pattern = DateTimeFormatterBuilder.getLocalizedDateTimePattern(FormatStyle.SHORT, null, IsoChronology.INSTANCE, Locale.getDefault())
+    return pattern.filter { it in "yMd" }
+        .replace(Regex("y+"), "yyyy").replace(Regex("M+"), "MM").replace(Regex("d+"), "dd")
 }

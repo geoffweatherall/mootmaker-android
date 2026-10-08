@@ -17,7 +17,7 @@ import java.time.LocalTime
 import java.util.UUID
 
 /**
- * Use cases D.25 and E.26 to E.34 against a real environment. See [Acceptance].
+ * Use cases D.25, E.26 to E.34, E.37 and N.106 against a real environment. See [Acceptance].
  *
  * Every case creates its own uniquely named rooms through the real API, so the cases are
  * independent of each other and of whatever else the environment holds. Room names start with
@@ -100,5 +100,41 @@ class AvailabilityAcceptanceTest {
         compose.onNodeWithContentDescription("Previous day").performClick()
         compose.waitForText("A-Days $run")
         compose.waitUntil(30_000) { compose.shown("Free all day") }
+    }
+
+    /** E.37: Add meeting from a day other than today opens the form on that day, not today. */
+    @Test
+    fun addMeetingFromAnotherDayStartsOnThatDay() {
+        val viewed = LocalDate.now().plusDays(3)
+        openAvailabilityAsAdmin()
+        repeat(3) { compose.onNodeWithContentDescription("Next day").performClick() }
+        compose.onNodeWithContentDescription("Add meeting").performClick()
+
+        compose.waitForText("Organiser")
+        compose.waitForText("$viewed")
+    }
+
+    /** N.106: the times in a room's opened meeting list follow your time format. */
+    @Test
+    fun aRoomsMeetingTimesFollowYourFormat() {
+        val run = UUID.randomUUID().toString().take(6)
+        val api = Api(Acceptance.admin)
+        // "A-0" sorts ahead of the other cases' rooms, so this is the first card with a meeting that day.
+        val room = api.createRoom("A-0 Format $run")
+        val tomorrow = LocalDate.now().plusDays(1)
+        api.createMeeting(room, api.myPersonId(), "Twelve hour $run", "${tomorrow}T09:00:00", "${tomorrow}T10:00:00")
+        val original = api.preferences().split("/")
+        api.setPreferences(original[0], "AmPm", original[2])
+        try {
+            openAvailabilityAsAdmin()
+            compose.onNodeWithContentDescription("Next day").performClick()
+            compose.waitForText("A-0 Format $run")
+            compose.onAllNodesWithTextFirst("See tomorrow's meetings (1)").performClick()
+
+            compose.waitForText("Twelve hour $run")
+            compose.waitForTextContaining("09:00 AM–10:00 AM")
+        } finally {
+            api.setPreferences(original[0], original[1], original[2])
+        }
     }
 }

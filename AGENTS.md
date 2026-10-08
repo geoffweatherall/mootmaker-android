@@ -2,9 +2,10 @@
 
 A native Android app — a second frontend for the same API as `mootmaker-webapp`.
 
-**Status:** M0 to M9 are built (M9: admin rooms and people); M10 (parity close-out) is next. The design is
+**Status:** at parity with the webapp; the milestones M0 to M10 of
 [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
-in the hub repository. Work one milestone at a time, as that document describes.
+in the hub repository are built. New work starts with its own design or issue, as anywhere in
+mootmaker. [`testing-strategy.md`](testing-strategy.md) describes the test layers.
 
 ## Working here
 

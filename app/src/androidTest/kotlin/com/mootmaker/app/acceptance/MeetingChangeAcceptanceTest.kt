@@ -21,9 +21,10 @@ import org.junit.Rule
 import org.junit.Test
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 
 /**
- * Use cases D.107, H.108 and O.112 to O.121 against a real environment. See [Acceptance]. Every case
+ * Use cases D.107, H.108, M.109, M.110, N.104 and O.112 to O.121 against a real environment. See [Acceptance]. Every case
  * makes its own uniquely named room and meetings through the real API, and checks the outcome there
  * as well as on screen.
  *
@@ -108,7 +109,7 @@ class MeetingChangeAcceptanceTest {
         assertFalse(hasIcon("Cancel meeting"))
     }
 
-    /** O.112 and O.121: the organiser edits the subject, and the change shows on the details. */
+    /** O.112: the organiser edits the subject, and the change shows on the details. */
     @Test
     fun theOrganiserEditsTheSubject() {
         val run = UUID.randomUUID().toString().take(6)
@@ -235,5 +236,124 @@ class MeetingChangeAcceptanceTest {
 
         waitForTextContaining("Someone else changed this meeting after you opened it")
         assertEquals("Theirs $run", admin.subjectOf(meeting))
+    }
+
+    /** O.121: changing the date moves the meeting there, as the same meeting, still editable. */
+    @Test
+    fun changingTheDateMovesTheMeeting() {
+        val run = UUID.randomUUID().toString().take(6)
+        val admin = Api(Acceptance.admin)
+        val room = admin.createRoom("Z-Move $run")
+        val from = today.plusDays(1)
+        val to = today.plusDays(4)
+        val meeting = admin.createMeeting(room, admin.myPersonId(), "Moving $run", "${from}T08:00:00", "${from}T09:00:00")
+
+        openFromHome(Acceptance.admin, "Moving $run")
+        compose.onNodeWithContentDescription("Edit meeting").performClick()
+        compose.waitForText("Moving $run")
+        compose.pickDate(to)
+        compose.waitForText("$to")
+        compose.onNode(hasText("Save") and hasClickAction()).performScrollTo().performClick()
+
+        compose.waitForText("Attendees · 0")
+        compose.waitForText("$to")
+        assertFalse("Moving $run" in admin.subjectsOn("$from"))
+        assertTrue("Moving $run" in admin.subjectsOn("$to"))
+        assertEquals("${to}T08:00:00", admin.meeting(meeting)!!["startTime"]!!.jsonPrimitive.content)
+        // Still the same meeting, and still editable: a second change to it is accepted.
+        admin.updateMeeting(meeting, room, admin.myPersonId(), "Moved $run", "${to}T08:00:00", "${to}T09:00:00")
+        assertEquals("Moved $run", admin.subjectOf(meeting))
+    }
+
+    /** N.104: a meeting reads in the viewer's own format, whatever the organiser's is. */
+    @Test
+    fun aMeetingReadsInTheViewersFormat() {
+        val run = UUID.randomUUID().toString().take(6)
+        val admin = Api(Acceptance.admin)
+        val standard = Api(Acceptance.standard)
+        val adminFormats = admin.preferences().split("/")
+        val standardFormats = standard.preferences().split("/")
+        val tomorrow = today.plusDays(1)
+        admin.setPreferences("Usa", "AmPm", adminFormats[2])
+        standard.setPreferences("Iso", "TwentyFourHour", standardFormats[2])
+        try {
+            admin.createMeeting(
+                admin.createRoom("Z-View $run"), admin.myPersonId(), "Viewer $run", "${tomorrow}T15:00:00", "${tomorrow}T16:00:00",
+                attendeeIds = listOf(standard.myPersonId()),
+            )
+
+            openFromHome(Acceptance.standard, "Viewer $run")
+            compose.waitForText("$tomorrow")
+            compose.waitForTextContaining("15:00–16:00")
+            assertEquals("Usa/AmPm/${adminFormats[2]}", admin.preferences())
+        } finally {
+            admin.setPreferences(adminFormats[0], adminFormats[1], adminFormats[2])
+            standard.setPreferences(standardFormats[0], standardFormats[1], standardFormats[2])
+        }
+    }
+
+    /**
+     * M.109: two attendees answer the same meeting at the same moment, one from the app and one
+     * through the API, and both answers land. The API serialises them on the day's record; this is
+     * the app's request meeting another in flight.
+     */
+    @Test
+    fun twoAttendeesAnsweringAtOnceBothLand() {
+        val run = UUID.randomUUID().toString().take(6)
+        val admin = Api(Acceptance.admin)
+        val standardId = Api(Acceptance.standard).myPersonId()
+        val adminId = admin.myPersonId()
+        val organiser = admin.createPerson("Host $run")
+        val meeting = admin.createMeeting(
+            admin.createRoom("Z-Both $run"), organiser, "Together $run", "${today}T08:00:00", "${today}T09:00:00",
+            attendeeIds = listOf(standardId, adminId),
+        )
+
+        scenario = Acceptance.launchApp()
+        compose.signIn(Acceptance.standard)
+        val going = hasContentDescription("Going for Together $run")
+        compose.scrollHomeTo(going)
+        answerAlongside({ admin.respond(meeting, "Maybe") }) { compose.onNode(going).performClick() }
+
+        compose.waitUntil(30_000) { admin.responseOf(meeting, standardId) == "Going" }
+        assertEquals("Maybe", admin.responseOf(meeting, adminId))
+    }
+
+    /**
+     * M.110: one person answers two meetings on the same day at the same moment, one from the app and
+     * one through the API. Both share the day's record, the likeliest real conflict; both land.
+     */
+    @Test
+    fun answeringTwoMeetingsOnOneDayAtOnceBothLand() {
+        val run = UUID.randomUUID().toString().take(6)
+        val admin = Api(Acceptance.admin)
+        val standard = Api(Acceptance.standard)
+        val standardId = standard.myPersonId()
+        val room = admin.createRoom("Z-Pair $run")
+        val first = admin.createMeeting(room, admin.myPersonId(), "Early $run", "${today}T07:00:00", "${today}T07:30:00", listOf(standardId))
+        val second = admin.createMeeting(room, admin.myPersonId(), "Late $run", "${today}T08:00:00", "${today}T08:30:00", listOf(standardId))
+
+        scenario = Acceptance.launchApp()
+        compose.signIn(Acceptance.standard)
+        val going = hasContentDescription("Going for Early $run")
+        compose.scrollHomeTo(going)
+        answerAlongside({ standard.respond(second, "NotGoing") }) { compose.onNode(going).performClick() }
+
+        compose.waitUntil(30_000) { admin.responseOf(first, standardId) == "Going" }
+        assertEquals("NotGoing", admin.responseOf(second, standardId))
+    }
+
+    /** Runs [other] on its own thread, released together with the app's [tap], and waits for it. */
+    private fun answerAlongside(other: () -> Unit, tap: () -> Unit) {
+        val start = CountDownLatch(1)
+        var failure: Throwable? = null
+        val thread = Thread {
+            start.await()
+            failure = runCatching(other).exceptionOrNull()
+        }.apply { start() }
+        start.countDown()
+        tap()
+        thread.join(30_000)
+        failure?.let { throw it }
     }
 }
