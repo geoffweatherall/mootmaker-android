@@ -1,5 +1,7 @@
 package com.mootmaker.app.acceptance
 
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -33,9 +35,14 @@ class CacheAcceptanceTest {
 
     private lateinit var scenario: ActivityScenario<MainActivity>
 
+    /** Every meeting a case books, cancelled afterwards so no other case sees them on its Home. */
+    private val booked = mutableListOf<String>()
+
     @After
     fun tearDown() {
         scenario.close()
+        // Some are already cancelled by the case itself; that is not a failure.
+        booked.forEach { runCatching { standard.cancelMeeting(it) } }
     }
 
     private val run = UUID.randomUUID().toString().take(6)
@@ -49,6 +56,7 @@ class CacheAcceptanceTest {
     /** A meeting A organises with B attending, in a room the admin made for this run. */
     private fun meetingForB(room: String, subject: String, date: LocalDate, hour: Int): String =
         standard.createMeeting(room, standard.myPersonId(), subject, at(date, hour), at(date, hour + 1), listOf(admin.myPersonId()))
+            .also { booked += it }
 
     private fun renameAsA(meeting: String, room: String, subject: String, date: LocalDate, hour: Int) =
         standard.updateMeeting(meeting, room, standard.myPersonId(), subject, at(date, hour), at(date, hour + 1), listOf(admin.myPersonId()))
@@ -60,7 +68,9 @@ class CacheAcceptanceTest {
     }
 
     private fun openCalendar() {
-        compose.onNodeWithText("Calendar").performClick()
+        // Home may have been scrolled down to a row, taking the Calendar button out of view.
+        compose.scrollClearOfTheBottom(hasScrollAction(), hasText("Calendar") and hasClickAction())
+        compose.onNode(hasText("Calendar") and hasClickAction()).performClick()
         compose.waitForText("This week")
     }
 
