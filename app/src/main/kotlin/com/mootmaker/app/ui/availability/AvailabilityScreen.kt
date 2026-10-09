@@ -59,6 +59,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mootmaker.app.ui.ErrorBanner
+import com.mootmaker.app.ui.LoadFailed
 import com.mootmaker.app.ui.theme.roomColor
 import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.agenda.formatTime
@@ -83,6 +85,7 @@ data class AvailabilityActions(
     val onAddMeeting: () -> Unit,
     val onOpenMeeting: (meetingId: String) -> Unit,
     val onRetry: () -> Unit,
+    val onDismissError: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,6 +113,7 @@ fun AvailabilityScreen(state: AvailabilityState, actions: AvailabilityActions) {
             DayNavigator(state, actions, onPick = { picking = true })
             if (state.loading && state.data != null) LinearProgressIndicator(Modifier.fillMaxWidth())
             val data = state.data
+            if (data != null) ErrorBanner(listOfNotNull(state.error), actions.onDismissError, onRetry = actions.onRetry)
             when {
                 data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
                 data == null -> FirstLoad()
@@ -119,7 +123,7 @@ fun AvailabilityScreen(state: AvailabilityState, actions: AvailabilityActions) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(24.dp),
                 )
-                else -> RoomList(state, data.timeFormat, data.rooms, actions)
+                else -> RoomList(state, data.timeFormat, data.rooms, actions, Modifier.weight(1f))
             }
         }
     }
@@ -167,10 +171,11 @@ private fun DayNavigator(state: AvailabilityState, actions: AvailabilityActions,
 }
 
 @Composable
-private fun RoomList(state: AvailabilityState, timeFormat: TimeFormat, rooms: List<RoomCard>, actions: AvailabilityActions) {
+private fun RoomList(state: AvailabilityState, timeFormat: TimeFormat, rooms: List<RoomCard>, actions: AvailabilityActions, modifier: Modifier) {
     // "today"/"tomorrow" for the near days, the weekday name otherwise ("See Friday's meetings").
     val dayLabel = dayRelativeLabel(state.date, state.today) ?: state.date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
     LazyColumn(
+        modifier,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -283,14 +288,6 @@ private fun Timeline(bookings: List<Booking>, color: androidx.compose.ui.graphic
             measurable.measure(androidx.compose.ui.unit.Constraints.fixed(segmentWidth, height)) to (segment.left / 100f * width).toInt()
         }
         layout(width, height) { placeables.forEach { (placeable, x) -> placeable.placeRelative(x, 0) } }
-    }
-}
-
-@Composable
-private fun LoadFailed(message: String, onRetry: () -> Unit) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(message, color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = onRetry) { Text("Try again") }
     }
 }
 

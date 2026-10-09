@@ -1,6 +1,8 @@
 package com.mootmaker.app.ui.admin
 
+import com.mootmaker.app.ui.ErrorBanner
 import com.mootmaker.app.ui.FirstLoad
+import com.mootmaker.app.ui.LoadFailed
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -78,6 +80,7 @@ data class RoomsActions(
     val onCloseEditor: () -> Unit,
     val onConfirmRemove: () -> Unit,
     val onKeep: () -> Unit,
+    val onDismissErrors: () -> Unit = {},
 )
 
 /** The admin Rooms screen (use cases P.125 to P.131), the webapp's `/rooms`. */
@@ -137,10 +140,11 @@ private fun RoomEditorPage(editor: RoomEditor, actions: RoomsActions) {
     EditorScaffold(
         title = if (editor.roomId == null) "Add room" else "Edit room",
         saving = editor.saving,
+        errors = editor.errors,
+        onDismissErrors = actions.onDismissErrors,
         onCancel = actions.onCloseEditor,
         onSave = actions.onSave,
     ) {
-        Errors(editor.errors)
         OutlinedTextField(
             value = editor.name,
             onValueChange = actions.onName,
@@ -204,6 +208,7 @@ data class PersonsActions(
     val onDismissSync: () -> Unit,
     val onConfirmRemove: () -> Unit,
     val onKeep: () -> Unit,
+    val onDismissErrors: () -> Unit = {},
 )
 
 /** The admin Persons screen (use cases Q.133 to Q.142), the webapp's `/persons`. */
@@ -292,10 +297,11 @@ private fun PersonEditorPage(editor: PersonEditor, actions: PersonsActions) {
     EditorScaffold(
         title = if (person == null) "Add person" else "Edit person",
         saving = editor.saving,
+        errors = editor.errors,
+        onDismissErrors = actions.onDismissErrors,
         onCancel = actions.onCloseEditor,
         onSave = actions.onSave,
     ) {
-        Errors(editor.errors)
         OutlinedTextField(
             value = editor.name,
             onValueChange = actions.onName,
@@ -334,7 +340,15 @@ private fun PersonEditorPage(editor: PersonEditor, actions: PersonsActions) {
 /** A full-screen form: Cancel (also Back) on the left, Save on the right, the fields scrolling under them. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditorScaffold(title: String, saving: Boolean, onCancel: () -> Unit, onSave: () -> Unit, content: @Composable () -> Unit) {
+private fun EditorScaffold(
+    title: String,
+    saving: Boolean,
+    errors: List<String>,
+    onDismissErrors: () -> Unit,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    content: @Composable () -> Unit,
+) {
     BackHandler(onBack = onCancel)
     Scaffold(
         topBar = {
@@ -345,12 +359,15 @@ private fun EditorScaffold(title: String, saving: Boolean, onCancel: () -> Unit,
             )
         },
     ) { padding ->
-        Column(
-            Modifier.padding(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
-            content()
+        Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
+            ErrorBanner(errors, onDismissErrors)
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
+                content()
+            }
         }
     }
 }
@@ -454,11 +471,3 @@ private fun Caption(text: String) = Text(text, style = MaterialTheme.typography.
 
 @Composable
 private fun Empty(text: String) = Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
-
-@Composable
-private fun LoadFailed(message: String, onRetry: () -> Unit) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(message, color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = onRetry) { Text("Try again") }
-    }
-}

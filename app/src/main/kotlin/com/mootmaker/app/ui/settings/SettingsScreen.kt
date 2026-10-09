@@ -1,6 +1,8 @@
 package com.mootmaker.app.ui.settings
 
+import com.mootmaker.app.ui.ErrorBanner
 import com.mootmaker.app.ui.FirstLoad
+import com.mootmaker.app.ui.LoadFailed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +63,7 @@ data class SettingsActions(
     val onRemovePhoto: () -> Unit,
     val onAskToDelete: () -> Unit = {},
     val onKeepAccount: () -> Unit = {},
+    val onDismissErrors: () -> Unit = {},
     val onConfirmDelete: () -> Unit = {},
 )
 
@@ -78,22 +81,20 @@ fun SettingsScreen(state: SettingsState, actions: SettingsActions) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            ErrorBanner(settingsBannerErrors(state), actions.onDismissErrors)
             when {
-                state.loadError != null && !state.loaded -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(state.loadError, color = MaterialTheme.colorScheme.error)
-                    OutlinedButton(onClick = actions.onRetry) { Text("Try again") }
-                }
+                state.loadError != null && !state.loaded -> LoadFailed(state.loadError, actions.onRetry)
                 !state.loaded -> FirstLoad()
-                else -> Sections(state, actions)
+                else -> Sections(state, actions, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun Sections(state: SettingsState, actions: SettingsActions) {
+private fun Sections(state: SettingsState, actions: SettingsActions, modifier: Modifier) {
     val hasPerson = state.profile != null
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PhotoSection(state, hasPerson, actions)
         HorizontalDivider()
         NameSection(state, hasPerson, actions)
@@ -107,7 +108,7 @@ private fun Sections(state: SettingsState, actions: SettingsActions) {
 
 @Composable
 private fun PhotoSection(state: SettingsState, hasPerson: Boolean, actions: SettingsActions) {
-    SectionTitle("Photo")
+    SectionTitle(SECTION_PHOTO)
     val profile = state.profile
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Avatar(profile?.name ?: "?", profile?.avatarUrl, size = 72.dp, textStyle = MaterialTheme.typography.headlineSmall)
@@ -124,7 +125,7 @@ private fun PhotoSection(state: SettingsState, hasPerson: Boolean, actions: Sett
 
 @Composable
 private fun NameSection(state: SettingsState, hasPerson: Boolean, actions: SettingsActions) {
-    SectionTitle("Your name")
+    SectionTitle(SECTION_NAME)
     OutlinedTextField(
         value = state.name,
         onValueChange = actions.onName,
@@ -141,7 +142,7 @@ private fun NameSection(state: SettingsState, hasPerson: Boolean, actions: Setti
 
 @Composable
 private fun FormatSection(state: SettingsState, hasPerson: Boolean, actions: SettingsActions) {
-    SectionTitle("Date and time format")
+    SectionTitle(SECTION_FORMATS)
     Text(
         "How dates and times are shown to you and how you type them in. This only changes what you see, not anyone else's view.",
         style = MaterialTheme.typography.bodyMedium,
@@ -205,7 +206,6 @@ private fun NoPersonNote(text: String) = Text(text, style = MaterialTheme.typogr
 
 @Composable
 private fun Outcome(status: SectionStatus) {
-    status.errors.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     status.success?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
 }
 

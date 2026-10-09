@@ -55,6 +55,31 @@ invalidate what they change, and signing out empties the store. The design, and 
 Apollo's normalized cache, is
 [`designs/android-cache.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-cache.md).
 
+## Errors
+
+Every screen shows an error one of two ways, with the shared components in
+`app/src/main/kotlin/com/mootmaker/app/ui/Errors.kt`. Use them; do not draw a red `Text`.
+
+1. **Nothing to show yet** (the first load failed): `LoadFailed(message, onRetry)`, the message and
+   Try again filling the screen.
+2. **Every other error not about one field** (a failed refresh, a refused or failed save, response,
+   cancel or admin change): `ErrorBanner(messages, onDismiss, onRetry)`.
+   - It sits **above** the scrolling content, inside the Scaffold, as
+     `Column { ErrorBanner(...); content with Modifier.weight(1f) }`, never inside the scroll, so it
+     cannot scroll out of view (#35).
+   - Every message in full, one per line; it grows to a third of the screen's height and then
+     scrolls within itself.
+   - Dismissible (the screen's ViewModel clears the error), and **Try again** when the error is a
+     failed refresh. It is a polite live region, so TalkBack announces it.
+   - A screen with several sections (Settings) still has one banner, each message prefixed with its
+     section's title.
+3. **Errors inside a dialog stay in the dialog.**
+4. **A field's own problem stays on the field** (`isError` and `supportingText`), for what the app
+   checks before calling the API.
+
+The design is
+[`designs/android-error-display.md`](https://github.com/geoffweatherall/mootmaker/blob/design/android-error-display/designs/android-error-display.md).
+
 ## Configuration and environments
 
 The app reads `https://www.mootmaker.com/mobile-config.json` (production) or

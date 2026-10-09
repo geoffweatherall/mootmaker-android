@@ -254,6 +254,35 @@ class ScreenshotTest {
         )
     }
 
+    private val rejectedForm = filledForm.copy(
+        roomId = "",
+        errors = listOf("Please select a room.", "The room does not have enough capacity for all attendees."),
+    )
+
+    @Test
+    fun addMeetingRejectedDark() = capture("add-meeting-rejected-dark", dark = true) {
+        AddMeetingScreen(rejectedForm, noFormActions)
+    }
+
+    @Test
+    fun addMeetingRejectedLargeFont() = captureLargeFont("add-meeting-rejected-large-font") {
+        AddMeetingScreen(rejectedForm, noFormActions)
+    }
+
+    @Test
+    fun homeRefreshError() = capture("home-refresh-error") {
+        HomeScreen(
+            HomeState(
+                TODAY,
+                HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)),
+                loading = false,
+                error = "Couldn't reach Mootmaker. Check your connection and try again.",
+            ),
+            null,
+            NO_ACTIONS,
+        )
+    }
+
     private val settingsProfile = Profile("p1", "Pat Example", DateFormat.British, TimeFormat.AmPm, "Monday", avatarUrl = null)
     private val settingsState = SettingsState(profile = settingsProfile, loaded = true, name = "Pat Example", dateFormat = DateFormat.British, timeFormat = TimeFormat.AmPm)
     private val noSettingsActions = SettingsActions({}, {}, {}, {}, {}, {}, {}, {}, {})

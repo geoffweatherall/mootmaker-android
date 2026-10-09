@@ -157,6 +157,7 @@ fun MootmakerApp(container: AppContainer) {
                 onForgotPassword = { navController.navigate(Routes.FORGOT_PASSWORD) },
                 onAbout = { navController.navigate(Routes.ABOUT) },
                 sessionExpired = sessionExpired,
+                onDismissError = viewModel::dismissError,
             )
         }
         // Both finish by signing in, and the session change then replaces the whole back stack with home.
@@ -173,6 +174,7 @@ fun MootmakerApp(container: AppContainer) {
                     onSubmitDetails = viewModel::submitDetails,
                     onSubmitCode = viewModel::submitCode,
                     onSignIn = { navController.popBackStack(Routes.SIGN_IN, inclusive = false) },
+                    onDismissError = viewModel::dismissError,
                 ),
             )
         }
@@ -188,6 +190,7 @@ fun MootmakerApp(container: AppContainer) {
                     onSubmitEmail = viewModel::submitEmail,
                     onSubmitReset = viewModel::submitReset,
                     onSignIn = { navController.popBackStack(Routes.SIGN_IN, inclusive = false) },
+                    onDismissError = viewModel::dismissError,
                 ),
             )
         }
@@ -204,6 +207,7 @@ fun MootmakerApp(container: AppContainer) {
                     onRoomAvailabilityToday = { navController.navigate(Routes.availability(state.today)) },
                     onAddMeeting = { navController.navigate(Routes.addMeeting(state.today)) },
                     onRetry = viewModel::refresh,
+                    onDismissError = viewModel::dismissError,
                     onAbout = { navController.navigate(Routes.ABOUT) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     isAdmin = claims?.isAdmin == true,
@@ -232,6 +236,7 @@ fun MootmakerApp(container: AppContainer) {
                     onAddMeeting = { navController.navigate(Routes.addMeeting(state.date)) },
                     onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                     onRetry = viewModel::refresh,
+                    onDismissError = viewModel::dismissError,
                 ),
             )
         }
@@ -303,6 +308,7 @@ fun MootmakerApp(container: AppContainer) {
                     onShare = { shareLink(context, it.subject, meetingShareUrl(configState.environment.siteUrl, it.id)) },
                     onOpenCalendar = { navController.navigate(Routes.calendar(it)) },
                     onRetry = viewModel::refresh,
+                    onDismissError = viewModel::dismissError,
                     onEdit = { navController.navigate(Routes.editMeeting(it)) },
                     onRespond = viewModel::respond,
                     onAskToCancel = viewModel::askToCancel,
@@ -331,6 +337,7 @@ fun MootmakerApp(container: AppContainer) {
                     onSelectPerson = viewModel::selectPerson,
                     onOpenMeeting = { navController.navigate(Routes.meeting(it)) },
                     onRetry = viewModel::refresh,
+                    onDismissError = viewModel::dismissError,
                 ),
             )
         }
@@ -360,6 +367,7 @@ fun MootmakerApp(container: AppContainer) {
                     onRemovePhoto = viewModel::removeAvatar,
                     onAskToDelete = viewModel::askToDelete,
                     onKeepAccount = viewModel::keepAccount,
+                    onDismissErrors = viewModel::dismissErrors,
                     onConfirmDelete = viewModel::confirmDelete,
                 ),
             )
@@ -383,6 +391,7 @@ fun MootmakerApp(container: AppContainer) {
                     onCloseEditor = viewModel::closeEditor,
                     onConfirmRemove = viewModel::confirmRemove,
                     onKeep = viewModel::keepRoom,
+                    onDismissErrors = viewModel::dismissErrors,
                 ),
             )
         }
@@ -407,6 +416,7 @@ fun MootmakerApp(container: AppContainer) {
                     onDismissSync = viewModel::dismissSyncFailure,
                     onConfirmRemove = viewModel::confirmRemove,
                     onKeep = viewModel::keepPerson,
+                    onDismissErrors = viewModel::dismissErrors,
                 ),
             )
         }

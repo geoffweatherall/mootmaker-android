@@ -1,6 +1,8 @@
 package com.mootmaker.app.ui.addmeeting
 
+import com.mootmaker.app.ui.ErrorBanner
 import com.mootmaker.app.ui.FirstLoad
+import com.mootmaker.app.ui.LoadFailed
 import com.mootmaker.app.ui.MootmakerIcons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -99,15 +101,15 @@ fun AddMeetingScreen(state: AddMeetingState, actions: AddMeetingActions) {
             )
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            val reference = state.reference
-            when {
-                reference != null -> Form(state, reference, actions)
-                state.loadError != null -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(state.loadError, color = MaterialTheme.colorScheme.error)
-                    OutlinedButton(onClick = actions.onRetry) { Text("Try again") }
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            ErrorBanner(state.errors, actions.onDismissErrors)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                val reference = state.reference
+                when {
+                    reference != null -> Form(state, reference, actions)
+                    state.loadError != null -> LoadFailed(state.loadError, actions.onRetry)
+                    else -> FirstLoad()
                 }
-                else -> FirstLoad()
             }
         }
     }
@@ -126,8 +128,6 @@ private fun Form(state: AddMeetingState, reference: MeetingFormReference, action
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (state.errors.isNotEmpty()) ErrorBanner(state.errors, actions.onDismissErrors)
-
         OutlinedTextField(
             value = state.subject,
             onValueChange = actions.onSubject,
@@ -187,18 +187,6 @@ private fun Form(state: AddMeetingState, reference: MeetingFormReference, action
             onChange = actions.onAttendees,
             onDone = { pickingAttendees = false },
         )
-    }
-}
-
-@Composable
-private fun ErrorBanner(messages: List<String>, onDismiss: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                messages.forEach { Text(it, color = MaterialTheme.colorScheme.onErrorContainer) }
-            }
-            TextButton(onClick = onDismiss) { Text("Dismiss") }
-        }
     }
 }
 

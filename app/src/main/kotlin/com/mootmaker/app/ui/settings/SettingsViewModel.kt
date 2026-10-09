@@ -99,6 +99,15 @@ class SettingsViewModel(
         run(SettingsState::avatarStatus, { s, v -> s.copy(avatarStatus = v) }, "Your photo was removed.", { s, _ -> s }) { source.removeAvatar(personId) }
     }
 
+    /** Clears every section's errors (the one banner); a success message stays. */
+    fun dismissErrors() = _state.update {
+        it.copy(
+            avatarStatus = it.avatarStatus.copy(errors = emptyList()),
+            nameStatus = it.nameStatus.copy(errors = emptyList()),
+            formatStatus = it.formatStatus.copy(errors = emptyList()),
+        )
+    }
+
     fun askToDelete() = _state.update { it.copy(deletion = DeletionState(confirming = true)) }
 
     fun keepAccount() = _state.update { if (it.deletion.deleting) it else it.copy(deletion = DeletionState()) }
@@ -155,3 +164,18 @@ class SettingsViewModel(
         timeFormat = profile?.timeFormat ?: TimeFormat.TwentyFourHour,
     )
 }
+
+/**
+ * The messages for the page's one error banner: each section's errors prefixed with that section's
+ * title on the page ("Photo", "Your name", "Date and time format"), in the order the sections appear.
+ */
+fun settingsBannerErrors(state: SettingsState): List<String> =
+    listOf(
+        SECTION_PHOTO to state.avatarStatus,
+        SECTION_NAME to state.nameStatus,
+        SECTION_FORMATS to state.formatStatus,
+    ).flatMap { (title, status) -> status.errors.map { "$title: $it" } }
+
+internal const val SECTION_PHOTO = "Photo"
+internal const val SECTION_NAME = "Your name"
+internal const val SECTION_FORMATS = "Date and time format"
