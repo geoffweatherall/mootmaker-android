@@ -36,6 +36,7 @@ environment is the definition of working**; the layers below it exist to fail so
 - **Screenshots cover every screen in light and dark**, and the busiest screens at Android's largest
   font size, where text must wrap rather than clip. After an intended visual change, re-record with
   `./gradlew :app:recordRoborazziDebug` and commit the PNGs.
+- **Error displays are tested as *displayed* (in the viewport, via `assertIsDisplayed` after scrolling the content), not merely present in the tree**: that is the difference that hid the errors in #35.
 - **Tests find elements by text and content description**, the same labels TalkBack reads, not by
   test tags.
 

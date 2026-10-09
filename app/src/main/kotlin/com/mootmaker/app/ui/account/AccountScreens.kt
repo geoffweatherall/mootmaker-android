@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.account
 
+import com.mootmaker.app.ui.ErrorBanner
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -53,12 +54,13 @@ data class SignUpActions(
     val onSubmitDetails: () -> Unit,
     val onSubmitCode: () -> Unit,
     val onSignIn: () -> Unit,
+    val onDismissError: () -> Unit = {},
 )
 
 /** Use cases A.1 to A.4: the details step, then the emailed code. */
 @Composable
 fun SignUpScreen(state: SignUpState, actions: SignUpActions) {
-    AccountPage("Sign up", state.error) {
+    AccountPage("Sign up", state.error, actions.onDismissError) {
         if (!state.confirming) {
             FormCard {
                 TextInput("Name", state.name, actions.onName, state.missing, capitalization = KeyboardCapitalization.Words)
@@ -96,12 +98,13 @@ data class ForgotPasswordActions(
     val onSubmitEmail: () -> Unit,
     val onSubmitReset: () -> Unit,
     val onSignIn: () -> Unit,
+    val onDismissError: () -> Unit = {},
 )
 
 /** Use cases C.16 to C.20: ask for a code, then the code with a new password. */
 @Composable
 fun ForgotPasswordScreen(state: ForgotPasswordState, actions: ForgotPasswordActions) {
-    AccountPage("Reset password", state.error) {
+    AccountPage("Reset password", state.error, actions.onDismissError) {
         if (!state.resetting) {
             FormCard {
                 Text(
@@ -137,30 +140,25 @@ fun ForgotPasswordScreen(state: ForgotPasswordState, actions: ForgotPasswordActi
 
 /** The sign-in screen's frame: the wordmark, a heading, and any failure above the form. */
 @Composable
-private fun AccountPage(title: String, error: String?, content: @Composable ColumnScope.() -> Unit) {
+private fun AccountPage(title: String, error: String?, onDismissError: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .safeDrawingPadding()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        Column(Modifier.safeDrawingPadding().imePadding()) {
+            ErrorBanner(listOfNotNull(error), onDismissError)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
             Column(modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth()) {
                 Text("Mootmaker", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(title, style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(24.dp))
-                error?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
-                    )
-                }
                 content()
+            }
             }
         }
     }

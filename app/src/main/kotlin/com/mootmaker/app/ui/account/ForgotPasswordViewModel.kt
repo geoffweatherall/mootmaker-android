@@ -62,6 +62,8 @@ class ForgotPasswordViewModel(
         }
     }
 
+    fun dismissError() = _state.update { it.copy(error = null) }
+
     private fun launch(fallback: String, block: suspend () -> Unit) {
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {

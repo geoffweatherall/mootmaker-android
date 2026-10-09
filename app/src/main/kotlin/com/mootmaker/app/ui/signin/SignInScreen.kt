@@ -1,5 +1,6 @@
 package com.mootmaker.app.ui.signin
 
+import com.mootmaker.app.ui.ErrorBanner
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,12 +58,15 @@ fun SignInScreen(
     onForgotPassword: () -> Unit,
     onAbout: () -> Unit,
     sessionExpired: Boolean = false,
+    onDismissError: () -> Unit = {},
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.safeDrawingPadding().imePadding()) {
+        ErrorBanner(listOfNotNull(state.error), onDismissError)
         Column(
             modifier = Modifier
-                .safeDrawingPadding()
-                .imePadding()
+                .weight(1f)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -86,6 +90,7 @@ fun SignInScreen(
                     TextButton(onClick = onAbout) { Text("About") }
                 }
             }
+        }
         }
     }
 }
@@ -119,14 +124,6 @@ private fun Form(
                     "The demo account is filled in. Tap Sign in to look around.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            state.error?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
             OutlinedTextField(
