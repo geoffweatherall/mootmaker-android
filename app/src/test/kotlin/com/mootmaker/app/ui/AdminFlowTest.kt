@@ -72,6 +72,10 @@ class AdminFlowTest {
         signInAndOpenMenu()
         compose.onNode(hasText(screen) and hasClickAction()).performClick()
         waitForText(if (screen == "Rooms") "Manage the rooms available for booking." else "Manage the people who can be booked into meetings.")
+        // The subtitle is there at once, the add button only once the list has loaded: waiting on the
+        // subtitle alone let a slow run tap a button not yet on screen (#42).
+        val add = if (screen == "Rooms") "Add room" else "Add person"
+        compose.waitUntil(5_000) { compose.onAllNodes(hasContentDescription(add)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     // L.89, P.124, Q.132: a standard user is not offered either screen.
