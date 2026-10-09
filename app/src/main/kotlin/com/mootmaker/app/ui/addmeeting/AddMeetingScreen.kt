@@ -59,6 +59,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -266,11 +271,16 @@ private fun shown(time: LocalTime, timeFormat: TimeFormat) = formatTime("2000-01
 /** The "Filter by name" box at the top of both people pickers. */
 @Composable
 private fun NameFilter(query: String, onQuery: (String) -> Unit) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQuery,
         label = { Text("Filter by name") },
         singleLine = true,
+        // Done puts the keyboard away, so the list gets the room back.
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); focus.clearFocus() }),
         modifier = Modifier.fillMaxWidth(),
     )
 }

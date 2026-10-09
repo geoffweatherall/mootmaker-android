@@ -15,6 +15,7 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -510,7 +511,7 @@ fun ComposeTestRule.pickPerson(field: String, name: String) {
     filterPeople(name)
     val row = hasText(name) and hasClickAction() and hasAnyAncestor(isDialog())
     waitSaying("$name in the $field picker") { onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
-    onNode(row).performClick()
+    onAllNodes(row).onFirst().performClick()
     waitSaying("the $field picker to close") { onAllNodes(hasText("Filter by name")).fetchSemanticsNodes().isEmpty() }
 }
 
@@ -519,6 +520,10 @@ fun ComposeTestRule.filterPeople(text: String) {
     val box = hasText("Filter by name") and hasSetTextAction()
     waitSaying("the \"Filter by name\" box") { onAllNodes(box).fetchSemanticsNodes().isNotEmpty() }
     onNode(box).performTextReplacement(text)
+    // The keyboard would take most of the dialog's height, leaving the list too short to show a row;
+    // the box's Done action puts it away, as it does for a person.
+    onNode(box).performImeAction()
+    waitForIdle()
 }
 
 /**

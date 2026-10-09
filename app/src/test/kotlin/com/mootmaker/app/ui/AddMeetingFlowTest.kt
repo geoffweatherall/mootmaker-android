@@ -22,6 +22,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
@@ -197,6 +198,18 @@ class AddMeetingFlowTest {
         save()
         waitForText("Attendees · 1")
         assertEquals(listOf("person-3"), backend.meetings.single().attendeeIds)
+    }
+
+    @Test
+    fun doneOnTheKeyboardKeepsTheFilterAndTheList() {
+        openForm()
+        field("Attendees").performClick()
+        waitForText("Filter by name")
+        filterBox().performTextInput("robin")
+        filterBox().performImeAction()
+        compose.waitForIdle()
+        assertTrue(listed("Robin Guest"))
+        assertFalse(listed("Sam Other"))
     }
 
     @Test
