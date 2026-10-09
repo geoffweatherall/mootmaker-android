@@ -46,6 +46,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mootmaker.app.ui.ErrorBanner
+import com.mootmaker.app.ui.LoadFailed
 import com.mootmaker.app.ui.theme.roomColor
 import com.mootmaker.data.agenda.AgendaDay
 import com.mootmaker.data.agenda.AgendaRow
@@ -66,6 +68,7 @@ data class CalendarActions(
     val onSelectPerson: (personId: String) -> Unit,
     val onOpenMeeting: (meetingId: String) -> Unit,
     val onRetry: () -> Unit,
+    val onDismissError: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +89,7 @@ fun CalendarScreen(state: CalendarState, actions: CalendarActions) {
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (state.loading && state.data != null) LinearProgressIndicator(Modifier.fillMaxWidth())
             val data = state.data
+            if (data != null) ErrorBanner(listOfNotNull(state.error), actions.onDismissError, onRetry = actions.onRetry)
             when {
                 data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
                 data == null -> FirstLoad()
@@ -95,20 +99,19 @@ fun CalendarScreen(state: CalendarState, actions: CalendarActions) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
                 )
-                else -> Week(state, data, actions)
+                else -> Week(state, data, actions, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun Week(state: CalendarState, data: CalendarData, actions: CalendarActions) {
-    LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
+private fun Week(state: CalendarState, data: CalendarData, actions: CalendarActions, modifier: Modifier) {
+    LazyColumn(modifier, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PersonSelector(state.personName ?: "Choose a person", data, actions.onSelectPerson)
                 WeekNavigator(state, actions)
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
         items(data.week, key = { it.date.toString() }) { day ->
@@ -197,14 +200,6 @@ private fun MeetingRow(row: AgendaRow, timeFormat: TimeFormat, onClick: () -> Un
                 overflow = TextOverflow.Ellipsis,
             )
         }
-    }
-}
-
-@Composable
-private fun LoadFailed(message: String, onRetry: () -> Unit) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(message, color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = onRetry) { Text("Try again") }
     }
 }
 

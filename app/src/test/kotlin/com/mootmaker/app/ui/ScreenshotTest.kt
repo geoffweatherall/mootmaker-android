@@ -261,6 +261,35 @@ class ScreenshotTest {
         )
     }
 
+    private val rejectedForm = filledForm.copy(
+        roomId = "",
+        errors = listOf("Please select a room.", "The room does not have enough capacity for all attendees."),
+    )
+
+    @Test
+    fun addMeetingRejectedDark() = capture("add-meeting-rejected-dark", dark = true) {
+        AddMeetingScreen(rejectedForm, noFormActions)
+    }
+
+    @Test
+    fun addMeetingRejectedLargeFont() = captureLargeFont("add-meeting-rejected-large-font") {
+        AddMeetingScreen(rejectedForm, noFormActions)
+    }
+
+    @Test
+    fun homeRefreshError() = capture("home-refresh-error") {
+        HomeScreen(
+            HomeState(
+                TODAY,
+                HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)),
+                loading = false,
+                error = "Couldn't reach Mootmaker. Check your connection and try again.",
+            ),
+            null,
+            NO_ACTIONS,
+        )
+    }
+
     /**
      * The form with its Start time dialog open, on the hour dial or, with [minutes], the minute dial.
      * A dialog is a window of its own, so this captures the whole screen rather than the compose root.

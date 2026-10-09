@@ -65,6 +65,8 @@ class RoomsViewModel(private val source: AdminSource) : ViewModel() {
 
     fun setColor(color: RoomColor?) = editor { it.copy(color = color, errors = emptyList()) }
 
+    fun dismissErrors() = editor { it.copy(errors = emptyList()) }
+
     fun closeEditor() = _state.update { if (it.editor?.saving == true) it else it.copy(editor = null) }
 
     fun save() {

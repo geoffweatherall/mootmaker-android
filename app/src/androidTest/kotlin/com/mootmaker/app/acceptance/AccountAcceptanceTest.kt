@@ -1,8 +1,8 @@
 package com.mootmaker.app.acceptance
 
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
@@ -56,24 +57,30 @@ class AccountAcceptanceTest {
      * the keyboard goes, on the Sign in link below the button (a PR acceptance run once found itself
      * back on sign-in after Reset password).
      */
-    private fun button(text: String): SemanticsNodeInteraction {
+    /**
+     * Presses the form's button through its click action rather than an injected tap. Closing the
+     * keyboard re-lays the form out, so a tap aimed at where the button was can land on the Sign in
+     * link below it, on the keyboard, or on nothing (an acceptance run on PR #37 pressed Reset
+     * password and nothing happened). The flows are what is under test here, not touch targeting.
+     */
+    private fun press(text: String) {
         scenario?.onActivity { activity ->
             activity.getSystemService(InputMethodManager::class.java)
                 .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
         }
         compose.waitForIdle()
-        return compose.onNode(hasText(text) and hasClickAction()).performScrollTo()
+        compose.onNode(hasText(text) and hasClickAction()).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
     }
 
     private fun startSignUp(identity: EmailHelper.Identity) {
         scenario = Acceptance.launchApp()
         compose.waitForText("Create an account")
-        button("Create an account").performClick()
+        press("Create an account")
         compose.waitForText("Already have an account?")
         compose.field("Name").performTextReplacement(identity.name)
         compose.field("Email").performTextReplacement(identity.email)
         compose.field("Password").performTextReplacement(identity.password)
-        button("Sign up").performClick()
+        press("Sign up")
     }
 
     /** A confirmed account made through Cognito directly: the starting point for the reset cases. */
@@ -109,14 +116,14 @@ class AccountAcceptanceTest {
         // A.4: a wrong code is refused, and the code step stays.
         val wrong = code.dropLast(1) + ((code.last().digitToInt() + 1) % 10)
         compose.field("Verification code").performTextReplacement(wrong)
-        button("Confirm").performClick()
+        press("Confirm")
         compose.waitForTextContaining("Invalid verification code")
         assertTrue(compose.shown("Confirm"))
         assertFalse(compose.shown("Add meeting"))
 
         // A.1: the real code confirms and signs in, with no separate sign-in step.
         compose.field("Verification code").performTextReplacement(code)
-        button("Confirm").performClick()
+        press("Confirm")
         compose.waitForText("Add meeting")
 
         // A.5: the Person was created with the entered name, and the account is standard.
@@ -159,7 +166,7 @@ class AccountAcceptanceTest {
         compose.onNodeWithContentDescription("More options").performClick()
         compose.onNodeWithText("Settings").performClick()
         compose.waitForText("Your name")
-        button("Delete my account").performClick()
+        press("Delete my account")
         compose.waitForText("Delete your account?")
         compose.onNode(hasText("Delete my account") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         compose.waitForText("Create an account")
@@ -190,10 +197,10 @@ class AccountAcceptanceTest {
     private fun startReset(email: String) {
         scenario = Acceptance.launchApp()
         compose.waitForText("Forgot password?")
-        button("Forgot password?").performClick()
+        press("Forgot password?")
         compose.waitForText("Remembered it?")
         compose.field("Email").performTextReplacement(email)
-        button("Send code").performClick()
+        press("Send code")
         compose.waitForText("New password")
     }
 
@@ -208,12 +215,12 @@ class AccountAcceptanceTest {
         val wrong = code.dropLast(1) + ((code.last().digitToInt() + 1) % 10)
         compose.field("Verification code").performTextReplacement(wrong)
         compose.field("New password").performTextReplacement(newPassword)
-        button("Reset password").performClick()
+        press("Reset password")
         compose.waitForTextContaining("Invalid verification code")
         assertFalse(compose.shown("Add meeting"))
 
         compose.field("Verification code").performTextReplacement(code)
-        button("Reset password").performClick()
+        press("Reset password")
         compose.waitForText("Add meeting")
         compose.waitForText(identity.name)
         toDelete.clear()
@@ -233,7 +240,7 @@ class AccountAcceptanceTest {
 
         compose.field("Verification code").performTextReplacement(code)
         compose.field("New password").performTextReplacement("short1")
-        button("Reset password").performClick()
+        press("Reset password")
         compose.waitForTextContaining("conform")
         assertFalse(compose.shown("Add meeting"))
     }
@@ -243,7 +250,7 @@ class AccountAcceptanceTest {
     fun anEmailWithNoAccountBehavesTheSameAndLinksBackToSignIn() {
         startReset("nobody-${UUID.randomUUID()}@mail.mootmaker.com")
         assertTrue(compose.shown("Verification code"))
-        button("Sign in").performClick()
+        press("Sign in")
         compose.waitForText("No account yet?")
     }
 }

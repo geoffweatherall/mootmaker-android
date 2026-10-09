@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mootmaker.app.ui.theme.roomColor
 import com.mootmaker.app.ui.Avatar
+import com.mootmaker.app.ui.ErrorBanner
+import com.mootmaker.app.ui.LoadFailed
 import com.mootmaker.data.agenda.formatDate
 import com.mootmaker.data.agenda.formatTime
 import com.mootmaker.data.meeting.AttendeeStatus
@@ -62,6 +64,7 @@ data class MeetingDetailsActions(
     val onConfirmCancel: () -> Unit = {},
     /** The meeting was deleted; leave the screen. */
     val onCancelled: () -> Unit = {},
+    val onDismissError: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,6 +102,11 @@ fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActi
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (state.loading && state.data != null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.data != null) {
+                // Action errors show on the cancel confirmation while it is up, and here otherwise.
+                val messages = listOfNotNull(state.error) + if (state.confirmingCancel) emptyList() else state.actionErrors
+                ErrorBanner(messages, actions.onDismissError, onRetry = if (state.error != null) actions.onRetry else null)
+            }
             when {
                 state.data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
                 state.data == null -> FirstLoad()
@@ -108,7 +116,7 @@ fun MeetingDetailsScreen(state: MeetingDetailsState, actions: MeetingDetailsActi
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
                 )
-                else -> Details(meeting, state.data, state, actions)
+                else -> Details(meeting, state.data, state, actions, Modifier.weight(1f))
             }
         }
     }
@@ -138,14 +146,12 @@ private fun CancelDialog(subject: String, state: MeetingDetailsState, actions: M
 }
 
 @Composable
-private fun Details(meeting: MeetingDetail, data: MeetingDetailsData, state: MeetingDetailsState, actions: MeetingDetailsActions) {
+private fun Details(meeting: MeetingDetail, data: MeetingDetailsData, state: MeetingDetailsState, actions: MeetingDetailsActions, modifier: Modifier) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Column(
-        Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (!state.confirmingCancel) state.actionErrors.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
         Text(meeting.subject, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).background(roomColor(meeting.roomColorSlot, dark), CircleShape))
@@ -206,13 +212,5 @@ private fun PersonRow(person: PersonRef, myPersonId: String?, status: String?, o
             isMe -> Text("You", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             status != null -> Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-@Composable
-private fun LoadFailed(message: String, onRetry: () -> Unit) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(message, color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = onRetry) { Text("Try again") }
     }
 }

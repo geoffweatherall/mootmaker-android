@@ -271,7 +271,7 @@ class AddMeetingFlowTest {
         waitForText("Please enter a subject.")
         assertTrue(shown("Please select a room."))
         assertTrue(backend.meetings.isEmpty())
-        compose.onNodeWithText("Dismiss").performClick()
+        compose.onNodeWithContentDescription("Dismiss").performClick()
         assertTrue(!shown("Please enter a subject."))
     }
 

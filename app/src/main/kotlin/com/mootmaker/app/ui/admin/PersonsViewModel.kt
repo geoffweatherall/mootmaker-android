@@ -72,6 +72,8 @@ class PersonsViewModel(private val source: AdminSource) : ViewModel() {
 
     fun setAdmin(isAdmin: Boolean) = editor { if (it.adminSwitchEnabled) it.copy(isAdmin = isAdmin, errors = emptyList()) else it }
 
+    fun dismissErrors() = editor { it.copy(errors = emptyList()) }
+
     fun closeEditor() = _state.update { if (it.editor?.saving == true) it else it.copy(editor = null) }
 
     /**
