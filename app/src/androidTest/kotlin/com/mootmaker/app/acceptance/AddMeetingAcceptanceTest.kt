@@ -104,6 +104,34 @@ class AddMeetingAcceptanceTest {
         assertTrue(compose.onAllNodes(hasText(guest) and hasClickAction()).fetchSemanticsNodes().size == 1)
     }
 
+    /** Issue #27: the attendees filter narrows by part of a name, keeps ticks, counts them, and says when nothing matches. */
+    @Test
+    fun theAttendeesFilterNarrowsAndKeepsTicks() {
+        val run = UUID.randomUUID().toString().take(6)
+        val admin = Api(Acceptance.admin)
+        val alpha = "Zq$run Alpha"
+        val beta = "Zq$run Beta"
+        admin.createPerson(alpha)
+        admin.createPerson(beta)
+
+        openForm()
+        field("Attendees").performClick()
+        compose.filterPeople("zq$run ALP")
+        compose.waitForText(alpha)
+        assertFalse(compose.shown(beta))
+        compose.onNodeWithText(alpha).performClick()
+        compose.filterPeople("zq$run bet")
+        compose.waitForText(beta)
+        compose.filterPeople("zq$run nobody")
+        compose.waitForText("No one matches")
+        compose.filterPeople("zq$run")
+        compose.waitForText(alpha)
+        compose.waitForText("Attendees (1)")
+        compose.onNodeWithText("Done").performClick()
+        compose.waitUntil(30_000) { compose.onAllNodes(hasText("Attendees") and hasText(alpha) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        assertFalse(compose.shown(beta))
+    }
+
     /** F.46, F.47 and F.51: nothing filled in lists every problem together, and nothing is booked. */
     @Test
     fun savingWithNothingFilledInListsEveryProblem() {
@@ -222,7 +250,7 @@ class AddMeetingAcceptanceTest {
         val room = admin.createRoom("Z-Both $run")
 
         openForm()
-        compose.pickFromMenu("Organiser", organiser)
+        compose.pickPerson("Organiser", organiser)
         field("Attendees").performClick()
         compose.waitForText("Done")
         compose.onNode(hasScrollAction() and hasAnyAncestor(isDialog())).performScrollToNode(hasText(other))

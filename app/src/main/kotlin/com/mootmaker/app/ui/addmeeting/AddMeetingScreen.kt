@@ -8,6 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,8 +42,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -55,12 +59,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.mootmaker.data.agenda.TimeFormat
 import com.mootmaker.data.agenda.formatDate
 import com.mootmaker.data.agenda.formatTime
 import com.mootmaker.data.meeting.MeetingFormReference
 import com.mootmaker.data.meeting.attendeeOptions
+import com.mootmaker.data.meeting.matchesName
 import com.mootmaker.data.meeting.organiserOptions
 import java.time.Instant
 import java.time.LocalDate
@@ -119,6 +131,7 @@ fun AddMeetingScreen(state: AddMeetingState, actions: AddMeetingActions) {
 private fun Form(state: AddMeetingState, reference: MeetingFormReference, actions: AddMeetingActions) {
     var pickingDate by remember { mutableStateOf(false) }
     var pickingAttendees by remember { mutableStateOf(false) }
+    var pickingOrganiser by remember { mutableStateOf(false) }
     val people = reference.people
     val organiser = people.firstOrNull { it.id == state.organiserId }
     val attendees = people.filter { it.id in state.attendeeIds }
@@ -135,7 +148,7 @@ private fun Form(state: AddMeetingState, reference: MeetingFormReference, action
             modifier = Modifier.fillMaxWidth(),
         )
 
-        MenuField("Organiser", organiser?.name.orEmpty(), organiserOptions(people, state.attendeeIds).map { it.name to it.id }, actions.onOrganiser)
+        PickerField("Organiser", organiser?.name.orEmpty()) { pickingOrganiser = true }
 
         PickerField("Attendees", if (attendees.isEmpty()) "" else attendees.joinToString(", ") { it.name }) { pickingAttendees = true }
 
@@ -178,6 +191,14 @@ private fun Form(state: AddMeetingState, reference: MeetingFormReference, action
             },
             dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("Cancel") } },
         ) { DatePicker(pickerState) }
+    }
+    if (pickingOrganiser) {
+        OrganiserPicker(
+            options = organiserOptions(people, state.attendeeIds).map { it.name to it.id },
+            selected = state.organiserId,
+            onPick = { pickingOrganiser = false; actions.onOrganiser(it) },
+            onDismiss = { pickingOrganiser = false },
+        )
     }
     if (pickingAttendees) {
         AttendeePicker(
@@ -247,33 +268,121 @@ private fun TimeField(label: String, time: LocalTime, timeFormat: TimeFormat, on
 
 private fun shown(time: LocalTime, timeFormat: TimeFormat) = formatTime("2000-01-01T${"%02d:%02d:00".format(time.hour, time.minute)}", timeFormat)
 
+/** The "Filter by name" box at the top of both people pickers. */
 @Composable
-private fun AttendeePicker(options: List<Pair<String, String>>, selected: List<String>, onChange: (List<String>) -> Unit, onDone: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDone,
-        title = { Text("Attendees") },
-        text = {
-            if (options.isEmpty()) {
-                Text("There is nobody else to invite.")
+private fun NameFilter(query: String, onQuery: (String) -> Unit) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQuery,
+        label = { Text("Filter by name") },
+        singleLine = true,
+        // Done puts the keyboard away, so the list gets the room back.
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); focus.clearFocus() }),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * The people matching the filter, as clickable rows built by [row]. [options] is label to id.
+ * Says "No one matches" when the filter hides everyone; the filter stays on screen so it can be cleared.
+ */
+@Composable
+private fun ColumnScope.FilteredPeople(
+    options: List<Pair<String, String>>,
+    emptyMessage: String,
+    row: @Composable (name: String, id: String) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val shown = options.filter { matchesName(it.first, query) }
+    Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (options.isEmpty()) {
+            Text(emptyMessage)
+        } else {
+            NameFilter(query) { query = it }
+            if (shown.isEmpty()) {
+                Text("No one matches", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                LazyColumn {
-                    items(options, key = { it.second }) { (name, id) ->
-                        val checked = id in selected
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().clickable(role = Role.Checkbox) {
-                                onChange(if (checked) selected - id else selected + id)
-                            },
-                        ) {
-                            Checkbox(checked = checked, onCheckedChange = null)
-                            Text(name, modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 12.dp))
-                        }
-                    }
+                LazyColumn(Modifier.weight(1f, fill = false)) {
+                    items(shown, key = { it.second }) { (name, id) -> row(name, id) }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDone) { Text("Done") } },
-    )
+        }
+    }
+}
+
+/**
+ * A dialog laid out like Material's AlertDialog: title, [content], then [buttons] at the end. It is
+ * built by hand because an AlertDialog sizes itself from its content's intrinsic width, and a
+ * text field in a dialog sized to its content never settles under Robolectric (the window and the
+ * field keep resizing each other), so this one takes the full width less a margin, capped.
+ */
+@Composable
+private fun PeopleDialog(title: String, onDismiss: () -> Unit, buttons: @Composable () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Surface(
+                modifier = Modifier.padding(horizontal = 24.dp).widthIn(max = 560.dp).fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 6.dp,
+            ) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).padding(24.dp)) {
+                    Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(16.dp))
+                    content()
+                    Spacer(Modifier.height(24.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { buttons() }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttendeePicker(options: List<Pair<String, String>>, selected: List<String>, onChange: (List<String>) -> Unit, onDone: () -> Unit) {
+    // Ticked people hidden by the filter stay in [selected], so they still count.
+    val ticked = options.count { it.second in selected }
+    PeopleDialog(
+        title = if (ticked > 0) "Attendees ($ticked)" else "Attendees",
+        onDismiss = onDone,
+        buttons = { TextButton(onClick = onDone) { Text("Done") } },
+    ) {
+        FilteredPeople(options, "There is nobody else to invite.") { name, id ->
+            val checked = id in selected
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable(role = Role.Checkbox) {
+                    onChange(if (checked) selected - id else selected + id)
+                },
+            ) {
+                Checkbox(checked = checked, onCheckedChange = null)
+                Text(name, modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 12.dp))
+            }
+        }
+    }
+}
+
+/** Choosing one person closes the dialog. */
+@Composable
+private fun OrganiserPicker(options: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    PeopleDialog(
+        title = "Organiser",
+        onDismiss = onDismiss,
+        buttons = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    ) {
+        FilteredPeople(options, "There is nobody to organise the meeting.") { name, id ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable(role = Role.RadioButton) { onPick(id) },
+            ) {
+                RadioButton(selected = id == selected, onClick = null)
+                Text(name, modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 12.dp))
+            }
+        }
+    }
 }
 
 private fun LocalDate.toUtcMillis(): Long = atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
