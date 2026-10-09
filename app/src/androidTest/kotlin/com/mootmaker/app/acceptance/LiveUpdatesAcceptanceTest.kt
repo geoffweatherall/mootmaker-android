@@ -36,7 +36,7 @@ class LiveUpdatesAcceptanceTest {
     private val today: LocalDate = LocalDate.now()
 
     /** Home is a lazy list, so a row is composed only once scrolled to; it can be scrolled to once its data has arrived. */
-    private fun waitForHomeRow(text: String) = compose.waitUntil(30_000) {
+    private fun waitForHomeRow(text: String) = compose.waitSaying("\"$text\" on Home") {
         runCatching { compose.onNode(hasScrollAction()).performScrollToNode(hasText(text)) }.isSuccess
     }
 
@@ -55,10 +55,14 @@ class LiveUpdatesAcceptanceTest {
         val admin = Api(Acceptance.admin)
         val room = admin.createRoom("Z-Live $run")
         val organiser = admin.myPersonId()
+        val anchor = admin.createMeeting(room, organiser, "Anchor $run", "${today}T06:00:00", "${today}T07:00:00")
 
         scenario = Acceptance.launchApp()
         compose.signIn(Acceptance.admin)
-        compose.waitForText("Needs your response")
+        // The channel is proved live before the booking, as in the other live cases, so a failure
+        // below is about this one broadcast reaching Home, not the socket coming up (#41).
+        compose.scrollHomeTo(hasText("Anchor $run"))
+        compose.untilLive { admin.updateMeeting(anchor, room, organiser, it, "${today}T06:00:00", "${today}T07:00:00") }
 
         admin.createMeeting(room, organiser, "Booked elsewhere $run", "${today}T08:00:00", "${today}T09:00:00")
 
