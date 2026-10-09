@@ -78,7 +78,7 @@ Every screen shows an error one of two ways, with the shared components in
    checks before calling the API.
 
 The design is
-[`designs/android-error-display.md`](https://github.com/geoffweatherall/mootmaker/blob/design/android-error-display/designs/android-error-display.md).
+[`designs/android-error-display.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-error-display.md).
 
 ## Configuration and environments
 
