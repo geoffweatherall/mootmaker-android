@@ -50,6 +50,10 @@ class AvailabilityViewModel(
 
     private var watching: Job? = null
 
+    /** The refresh failure now in the store, and the one the user dismissed: a dismissed failure stays hidden, a new one shows. */
+    private var currentFailure: Throwable? = null
+    private var dismissedFailure: Throwable? = null
+
     init {
         watch()
     }
@@ -60,12 +64,14 @@ class AvailabilityViewModel(
         val date = _state.value.date
         watching = viewModelScope.launch {
             source.observe(date).collect { loaded ->
+                currentFailure = loaded.error
                 _state.update { state ->
+                    val shown = loaded.error?.takeUnless { it is SessionExpiredException || it === dismissedFailure }?.screenMessage()
                     state.copy(
                         data = loaded.data,
                         bounds = loaded.data?.bounds ?: state.bounds,
                         loading = loaded.fetching || (loaded.data == null && loaded.error == null),
-                        error = loaded.error?.takeUnless { it is SessionExpiredException }?.screenMessage(),
+                        error = shown,
                     )
                 }
             }
@@ -93,5 +99,11 @@ class AvailabilityViewModel(
 
     fun toggleExpanded(roomId: String) {
         _state.update { it.copy(expanded = if (roomId in it.expanded) it.expanded - roomId else it.expanded + roomId) }
+    }
+
+    /** Hides the refresh error until the next failure. */
+    fun dismissError() {
+        dismissedFailure = currentFailure
+        _state.update { it.copy(error = null) }
     }
 }

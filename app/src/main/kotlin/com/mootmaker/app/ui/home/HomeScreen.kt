@@ -1,6 +1,8 @@
 package com.mootmaker.app.ui.home
 
+import com.mootmaker.app.ui.ErrorBanner
 import com.mootmaker.app.ui.FirstLoad
+import com.mootmaker.app.ui.LoadFailed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -85,6 +87,7 @@ data class HomeActions(
     val isAdmin: Boolean = false,
     val onRooms: () -> Unit = {},
     val onPersons: () -> Unit = {},
+    val onDismissError: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,21 +119,28 @@ fun HomeScreen(state: HomeState, fallbackName: String?, actions: HomeActions) {
             if (state.loading && state.data != null) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
+            if (state.data != null) {
+                ErrorBanner(
+                    listOfNotNull(state.error, state.respondError),
+                    actions.onDismissError,
+                    onRetry = if (state.error != null) actions.onRetry else null,
+                )
+            }
             when {
                 state.data == null && state.error != null -> LoadFailed(state.error, actions.onRetry)
                 state.data == null -> FirstLoad()
                 state.data.agenda == null -> NoLinkedPerson(state, actions)
-                else -> Agenda(state, fallbackName, actions)
+                else -> Agenda(state, fallbackName, actions, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun Agenda(state: HomeState, fallbackName: String?, actions: HomeActions) {
+private fun Agenda(state: HomeState, fallbackName: String?, actions: HomeActions, modifier: Modifier = Modifier) {
     val data = state.data!!
     val agenda = data.agenda!!
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(modifier, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             val greeting = data.name ?: fallbackName ?: "Welcome"
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -157,8 +167,6 @@ private fun Agenda(state: HomeState, fallbackName: String?, actions: HomeActions
                 EntryPoint("Add meeting", Icons.Filled.Add, actions.onAddMeeting)
             }
         }
-        state.error?.let { error -> item { Text(error, color = MaterialTheme.colorScheme.error) } }
-        state.respondError?.let { error -> item { Text(error, color = MaterialTheme.colorScheme.error) } }
         needsResponseSection(state, data, actions)
         item {
             Card(
@@ -315,19 +323,9 @@ private fun NoLinkedPerson(state: HomeState, actions: HomeActions) {
             "Your account hasn't been set up properly — no profile could be found for your sign-in.",
             color = MaterialTheme.colorScheme.error,
         )
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             EntryPoint("Add meeting", Icons.Filled.Add, actions.onAddMeeting)
             EntryPoint("Rooms today", Icons.Filled.Home, actions.onRoomAvailabilityToday)
         }
     }
 }
-
-@Composable
-private fun LoadFailed(message: String, onRetry: () -> Unit) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(message, color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = onRetry) { Text("Try again") }
-    }
-}
-

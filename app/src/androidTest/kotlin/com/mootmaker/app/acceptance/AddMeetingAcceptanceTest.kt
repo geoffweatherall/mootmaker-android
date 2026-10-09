@@ -1,6 +1,7 @@
 package com.mootmaker.app.acceptance
 
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -151,6 +152,8 @@ class AddMeetingAcceptanceTest {
         save()
 
         compose.waitForText("The room already has a meeting scheduled during that time range.")
+        // Pressed at the bottom of a scrolling form, the refusal must be on screen, not just in the tree (#35).
+        compose.onNodeWithText("The room already has a meeting scheduled during that time range.").assertIsDisplayed()
     }
 
     /** F.53: Suggest a room fills the Room field. Which room is the API's ranking, covered by its own tests. */
@@ -177,7 +180,7 @@ class AddMeetingAcceptanceTest {
         save()
         compose.waitForText("End time must be after the start time.")
 
-        compose.onNodeWithText("Dismiss").performClick()
+        compose.onNodeWithContentDescription("Dismiss").performClick()
         compose.pickTime("End time", LocalTime.of(14, 0))
         save()
         compose.waitForText("End time must be after the start time.")

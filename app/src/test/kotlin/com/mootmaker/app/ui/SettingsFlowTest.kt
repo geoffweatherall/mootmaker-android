@@ -83,7 +83,7 @@ class SettingsFlowTest {
         compose.onNode(hasText("Name") and hasSetTextAction()).performTextReplacement("")
         button("Save name").performClick()
 
-        waitForText("Name must not be blank.")
+        waitForText("Your name: Name must not be blank.")
         assertEquals("Pat Example", backend.personName)
     }
 

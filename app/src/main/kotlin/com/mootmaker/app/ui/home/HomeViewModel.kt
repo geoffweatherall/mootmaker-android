@@ -46,6 +46,10 @@ class HomeViewModel(
     private val saved = mutableSetOf<String>()
     private var sawRefetch = false
 
+    /** The refresh failure now in the store, and the one the user dismissed: a dismissed failure stays hidden, a new one shows. */
+    private var currentFailure: Throwable? = null
+    private var dismissedFailure: Throwable? = null
+
     init {
         watch()
     }
@@ -61,11 +65,13 @@ class HomeViewModel(
         if (today != _state.value.today) _state.update { it.copy(today = today, data = null) }
         watching = viewModelScope.launch {
             source.observe(today, level).collect { loaded ->
+                currentFailure = loaded.error
                 _state.update { state ->
+                    val shown = loaded.error?.takeUnless { it is SessionExpiredException || it === dismissedFailure }?.screenMessage()
                     state.copy(
                         data = loaded.data ?: state.data,
                         loading = loaded.fetching || (loaded.data == null && loaded.error == null),
-                        error = loaded.error?.takeUnless { it is SessionExpiredException }?.screenMessage(),
+                        error = shown,
                     )
                 }
                 settleResponses(refetching = loaded.fetching)
@@ -124,5 +130,11 @@ class HomeViewModel(
                 if (!succeeded) _state.update { it.copy(pendingResponses = it.pendingResponses - meetingId) }
             }
         }
+    }
+
+    /** Hides the refresh error and the response error until the next failure. */
+    fun dismissError() {
+        dismissedFailure = currentFailure
+        _state.update { it.copy(error = null, respondError = null) }
     }
 }

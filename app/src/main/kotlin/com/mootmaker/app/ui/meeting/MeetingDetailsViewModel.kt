@@ -45,16 +45,22 @@ class MeetingDetailsViewModel(
     private var saved = false
     private var sawRefetch = false
 
+    /** The refresh failure now in the store, and the one the user dismissed: a dismissed failure stays hidden, a new one shows. */
+    private var currentFailure: Throwable? = null
+    private var dismissedFailure: Throwable? = null
+
     init {
         // Draws from the store: at once when the meeting is in a held day, then as refetches land.
         // The store refetches on live changes itself, and follows a meeting that moves or is cancelled.
         viewModelScope.launch {
             source.observe(meetingId).collect { loaded ->
+                currentFailure = loaded.error
                 _state.update { state ->
+                    val shown = loaded.error?.takeUnless { it is SessionExpiredException || it === dismissedFailure }?.screenMessage()
                     state.copy(
                         data = loaded.data ?: state.data,
                         loading = loaded.fetching || (loaded.data == null && loaded.error == null),
-                        error = loaded.error?.takeUnless { it is SessionExpiredException }?.screenMessage(),
+                        error = shown,
                     )
                 }
                 settleResponse(refetching = loaded.fetching)
@@ -81,6 +87,12 @@ class MeetingDetailsViewModel(
 
     /** On becoming visible and on Try again: fetches again whatever failed. */
     fun refresh() = source.retry()
+
+    /** Hides the refresh error and any action errors until the next failure. */
+    fun dismissError() {
+        dismissedFailure = currentFailure
+        _state.update { it.copy(error = null, actionErrors = emptyList()) }
+    }
 
     /** Whether Edit and Cancel are offered: the organiser or an admin (the API refuses anyone else regardless). */
     fun canEdit(): Boolean {
