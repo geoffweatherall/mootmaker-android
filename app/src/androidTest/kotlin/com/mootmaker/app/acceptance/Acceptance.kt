@@ -504,12 +504,13 @@ fun ComposeTestRule.pickTime(field: String, time: LocalTime) {
 /**
  * The meeting form: opens the people picker behind the [field] ("Organiser"), types [name] into its
  * "Filter by name" box, and taps that person's row in the dialog. The row is looked for in the dialog,
- * so a field already showing the same text is never the one tapped. Choosing closes the dialog.
+ * so a field already showing the same text is never the one tapped, and not the filter box, which
+ * holds the same text once [name] is typed into it. Choosing closes the dialog.
  */
 fun ComposeTestRule.pickPerson(field: String, name: String) {
     onNode(hasText(field) and hasClickAction()).performScrollTo().performClick()
     filterPeople(name)
-    val row = hasText(name) and hasClickAction() and hasAnyAncestor(isDialog())
+    val row = hasText(name) and hasClickAction() and !hasSetTextAction() and hasAnyAncestor(isDialog())
     waitSaying("$name in the $field picker") { onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
     onAllNodes(row).onFirst().performClick()
     waitSaying("the $field picker to close") { onAllNodes(hasText("Filter by name")).fetchSemanticsNodes().isEmpty() }

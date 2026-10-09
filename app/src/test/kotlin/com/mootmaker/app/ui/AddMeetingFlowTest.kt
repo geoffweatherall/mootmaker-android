@@ -223,6 +223,7 @@ class AddMeetingFlowTest {
         compose.waitForIdle()
         assertFalse(listed("Robin Guest"))
         assertFalse(listed("Pat Example"))
+        assertEquals(1, inPicker("Sam Other").fetchSemanticsNodes().size)
         inPicker("Sam Other").onFirst().performClick()
 
         compose.waitUntil(5_000) { !shown("Filter by name") }
