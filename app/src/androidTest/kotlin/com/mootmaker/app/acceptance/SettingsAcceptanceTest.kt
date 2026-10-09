@@ -86,7 +86,7 @@ class SettingsAcceptanceTest {
         compose.onNode(hasText("Name") and hasSetTextAction()).performTextReplacement("")
         button("Save name").performScrollTo().performClick()
 
-        compose.waitForText("Name must not be blank.")
+        compose.waitForText("Your name: Name must not be blank.")
         assertEquals(original, Api(Acceptance.standard).myName())
     }
 
