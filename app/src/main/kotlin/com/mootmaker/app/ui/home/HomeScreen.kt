@@ -216,7 +216,7 @@ private fun LazyListScope.needsResponseSection(state: HomeState, data: HomeData,
         }
     }
     items(data.needsResponse, key = { "needs-${it.meetingId}" }) { item ->
-        NeedsResponseCard(item, data.timeFormat, state.today, enabled = item.meetingId !in state.responding, actions)
+        NeedsResponseCard(item, data.timeFormat, state.today, pending = state.pendingResponses[item.meetingId], actions)
     }
     item {
         TextButton(onClick = actions.onSearchFurtherAhead) { Text("Search further ahead") }
@@ -224,7 +224,7 @@ private fun LazyListScope.needsResponseSection(state: HomeState, data: HomeData,
 }
 
 @Composable
-private fun NeedsResponseCard(item: NeedsResponseItem, timeFormat: TimeFormat, today: LocalDate, enabled: Boolean, actions: HomeActions) {
+private fun NeedsResponseCard(item: NeedsResponseItem, timeFormat: TimeFormat, today: LocalDate, pending: AttendeeStatus?, actions: HomeActions) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -249,7 +249,7 @@ private fun NeedsResponseCard(item: NeedsResponseItem, timeFormat: TimeFormat, t
                     }
                 }
             }
-            ResponseButtons(selected = null, enabled = enabled, onRespond = { actions.onRespond(item.meetingId, it) }, forMeeting = item.subject)
+            ResponseButtons(selected = null, enabled = pending == null, pending = pending, onRespond = { actions.onRespond(item.meetingId, it) }, forMeeting = item.subject)
         }
     }
 }

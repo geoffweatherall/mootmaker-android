@@ -1,5 +1,7 @@
 package com.mootmaker.app.ui
 
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -24,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.time.LocalDate
+import java.util.concurrent.CountDownLatch
 import java.time.LocalTime
 
 /**
@@ -53,6 +56,7 @@ class EditCancelRespondFlowTest {
 
     @After
     fun tearDown() {
+        backend.holdGraphql?.countDown()
         scenario?.close()
     }
 
@@ -122,6 +126,90 @@ class EditCancelRespondFlowTest {
         // The organiser has no control of their own.
         assertTrue(!hasIcon("Edit meeting"))
         assertTrue(!hasIcon("Cancel meeting"))
+    }
+
+    private fun savingShown() = compose.onAllNodes(hasContentDescription("Saving"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    // Issue #26: the tapped answer is drawn chosen at once, with a spinner, and the others are off until the save returns.
+    @Test
+    fun answeringFromTheMeetingDetailsShowsTheChoiceWhileTheSaveIsHeld() {
+        signInToHome()
+        openMeeting("Invite me")
+        waitForText("Your response")
+        backend.holdGraphql = CountDownLatch(1)
+
+        button("Maybe").performClick()
+
+        compose.waitUntil(5_000) { savingShown() }
+        button("Maybe").assertIsEnabled()
+        button("Going").assertIsNotEnabled()
+        button("Not going").assertIsNotEnabled()
+        assertEquals(null, backend.meetings.first { it.id == "invite" }.responses["person-1"])
+
+        backend.holdGraphql!!.countDown()
+        compose.waitUntil(5_000) { !savingShown() }
+        assertEquals("Maybe", backend.meetings.first { it.id == "invite" }.responses["person-1"])
+        button("Going").assertIsEnabled()
+        button("Not going").assertIsEnabled()
+        // The refetched meeting confirms the answer: Maybe is the chosen one, so it does nothing when tapped.
+        waitForText("Maybe", substring = false)
+    }
+
+    // Issue #26: a refused answer goes back to what it was, and says why.
+    @Test
+    fun aRefusedAnswerOnTheMeetingDetailsRollsBack() {
+        signInToHome()
+        openMeeting("Invite me")
+        waitForText("Your response")
+        backend.holdGraphql = CountDownLatch(1)
+
+        button("Going").performClick()
+        compose.waitUntil(5_000) { savingShown() }
+        // Meanwhile the invitation is withdrawn, so the API refuses the answer.
+        backend.meetings = backend.meetings.map { if (it.id == "invite") it.copy(attendeeIds = emptyList()) else it }
+        backend.holdGraphql!!.countDown()
+
+        waitForText("You aren't an attendee of this meeting", substring = true)
+        compose.waitUntil(5_000) { !savingShown() }
+        assertEquals(null, backend.meetings.first { it.id == "invite" }.responses["person-1"])
+    }
+
+    // Issue #26: on Home the answered card stays, showing the choice, until the refetch takes it off the list.
+    @Test
+    fun answeringFromHomeShowsTheChoiceWhileTheSaveIsHeld() {
+        signInToHome()
+        waitForText("Invite me")
+        backend.holdGraphql = CountDownLatch(1)
+
+        button("Not going").performClick()
+
+        compose.waitUntil(5_000) { savingShown() }
+        button("Not going").assertIsEnabled()
+        button("Going").assertIsNotEnabled()
+        button("Maybe").assertIsNotEnabled()
+        assertTrue(shown("Invite me"))
+
+        backend.holdGraphql!!.countDown()
+        waitForText("Nothing waiting on a response between", substring = true)
+        assertEquals("NotGoing", backend.meetings.first { it.id == "invite" }.responses["person-1"])
+        assertTrue(!savingShown())
+    }
+
+    // Issue #26: a refused answer on Home puts the card's buttons back and says why.
+    @Test
+    fun aRefusedAnswerOnHomeRollsBack() {
+        signInToHome()
+        waitForText("Invite me")
+        backend.holdGraphql = CountDownLatch(1)
+
+        button("Going").performClick()
+        compose.waitUntil(5_000) { savingShown() }
+        backend.meetings = backend.meetings.map { if (it.id == "invite") it.copy(attendeeIds = emptyList()) else it }
+        backend.holdGraphql!!.countDown()
+
+        waitForText("You aren't an attendee of this meeting", substring = true)
+        compose.waitUntil(5_000) { !savingShown() }
+        assertEquals(null, backend.meetings.first { it.id == "invite" }.responses["person-1"])
     }
 
     @Test

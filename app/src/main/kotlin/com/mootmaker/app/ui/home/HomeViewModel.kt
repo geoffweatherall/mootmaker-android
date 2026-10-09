@@ -26,8 +26,8 @@ data class HomeState(
     val error: String? = null,
     /** How many times "Search further ahead" has widened the needs-response window. */
     val searchLevel: Int = 0,
-    /** Meetings whose response is being saved; their buttons are disabled meanwhile. */
-    val responding: Set<String> = emptySet(),
+    /** Meetings whose response is being saved, with the answer given: shown as chosen at once, buttons disabled meanwhile. */
+    val pendingResponses: Map<String, AttendeeStatus> = emptyMap(),
     /** Why the last response was not saved. Kept apart from [error] so the reload that follows doesn't clear it. */
     val respondError: String? = null,
 )
@@ -41,6 +41,10 @@ class HomeViewModel(
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
     private var watching: Job? = null
+
+    /** Meetings whose save has returned and whose chosen answer is waiting for the refetch. */
+    private val saved = mutableSetOf<String>()
+    private var sawRefetch = false
 
     /** The refresh failure now in the store, and the one the user dismissed: a dismissed failure stays hidden, a new one shows. */
     private var currentFailure: Throwable? = null
@@ -70,8 +74,24 @@ class HomeViewModel(
                         error = shown,
                     )
                 }
+                settleResponses(refetching = loaded.fetching)
             }
         }
+    }
+
+    /**
+     * Once a save has returned, the chosen answer stays drawn until the refetch takes the meeting off
+     * the needs-response list (or a refetch that began after the save has finished), so the buttons
+     * never flick back while the store catches up.
+     */
+    private fun settleResponses(refetching: Boolean) {
+        if (saved.isEmpty()) return
+        if (refetching) sawRefetch = true
+        val stillWaiting = _state.value.data?.needsResponse?.map { it.meetingId }?.toSet().orEmpty()
+        val settled = saved.filter { it !in stillWaiting || (sawRefetch && !refetching) }
+        if (settled.isEmpty()) return
+        saved.removeAll(settled.toSet())
+        _state.update { it.copy(pendingResponses = it.pendingResponses - settled.toSet()) }
     }
 
     /** On becoming visible and on Try again: a new day starts a new window; otherwise failures are retried. */
@@ -87,12 +107,18 @@ class HomeViewModel(
 
     /** Records the caller's response; the write invalidates the store, which refetches the day. */
     fun respond(meetingId: String, status: AttendeeStatus) {
-        if (meetingId in _state.value.responding) return
-        _state.update { it.copy(responding = it.responding + meetingId, respondError = null) }
+        if (meetingId in _state.value.pendingResponses) return
+        _state.update { it.copy(pendingResponses = it.pendingResponses + (meetingId to status), respondError = null) }
         viewModelScope.launch {
+            var succeeded = false
             try {
                 when (val result = respondSource.respond(meetingId, status)) {
-                    WriteResult.Done -> Unit
+                    WriteResult.Done -> {
+                        succeeded = true
+                        saved += meetingId
+                        sawRefetch = false
+                        settleResponses(refetching = false)
+                    }
                     is WriteResult.Rejected -> _state.update { it.copy(respondError = result.messages.joinToString("\n")) }
                 }
             } catch (expired: SessionExpiredException) {
@@ -100,7 +126,8 @@ class HomeViewModel(
             } catch (failure: ApiException) {
                 _state.update { it.copy(respondError = failure.message) }
             } finally {
-                _state.update { it.copy(responding = it.responding - meetingId) }
+                // A refusal or failure rolls the selection back; a saved answer waits for the refetch.
+                if (!succeeded) _state.update { it.copy(pendingResponses = it.pendingResponses - meetingId) }
             }
         }
     }
