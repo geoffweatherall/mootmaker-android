@@ -50,6 +50,10 @@ import java.time.format.DateTimeFormatterBuilder
 import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import java.util.UUID
+import java.time.LocalTime
+import com.mootmaker.data.agenda.TimeFormat
+import com.mootmaker.data.agenda.formatTime
+import com.mootmaker.data.meeting.twelveHourClockHour
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isPopup
@@ -469,7 +473,36 @@ fun ComposeTestRule.signIn(account: Acceptance.Account) {
 }
 
 /**
- * The meeting form: opens the menu under the [field] labelled so ("Start time", "Room") and picks
+ * The meeting form: sets the time [field] ("Start time", "End time") to [time] through its "Select
+ * time" dialog, by switching the dialog to typing and entering the hour and minute; on a 12-hour
+ * account it then chooses AM or PM (after the hour, which resets it). Typing is far steadier on an
+ * emulator than dragging the dial. Waits until the field shows the time, as the account formats it.
+ */
+fun ComposeTestRule.pickTime(field: String, time: LocalTime) {
+    onNode(hasText(field) and hasClickAction()).performScrollTo().performClick()
+    waitSaying("the \"Select time\" dialog for $field") { shown("Select time") }
+    onNode(hasContentDescription("Switch to text input mode") and hasAnyAncestor(isDialog())).performClick()
+    val hourField = hasContentDescription("for hour") and hasSetTextAction()
+    val minuteField = hasContentDescription("for minutes") and hasSetTextAction()
+    waitSaying("the time dialog's hour field") { onAllNodes(hourField).fetchSemanticsNodes().isNotEmpty() }
+    val twelveHour = onAllNodes(hasContentDescription("Select AM or PM")).fetchSemanticsNodes().isNotEmpty()
+    val hour = if (twelveHour) twelveHourClockHour(time.hour) else time.hour
+    onNode(hourField).performTextReplacement("%02d".format(hour))
+    onNode(minuteField).performTextReplacement("%02d".format(time.minute))
+    if (twelveHour) {
+        onNode(hasText(if (time.hour < 12) "AM" else "PM") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+    }
+    onNode(hasText("OK") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+    waitSaying("the time dialog to close") { !shown("Select time") }
+    val shownAs = formatTime(
+        "2000-01-01T%02d:%02d:00".format(time.hour, time.minute),
+        if (twelveHour) TimeFormat.AmPm else TimeFormat.TwentyFourHour,
+    )
+    waitSaying("$field to show \"$shownAs\"") { onAllNodes(hasText(field) and hasText(shownAs) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+}
+
+/**
+ * The meeting form: opens the menu under the [field] labelled so ("Organiser", "Room") and picks
  * [option] from it. The option is looked for in the menu's popup, so a field already showing the
  * same text is never the one tapped.
  */
