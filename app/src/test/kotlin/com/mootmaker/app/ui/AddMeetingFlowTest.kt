@@ -13,6 +13,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -129,6 +132,135 @@ class AddMeetingFlowTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Robin Guest") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(1, compose.onAllNodes(hasText("Sam Other") and hasClickAction()).fetchSemanticsNodes().size)
     }
+
+    // --- Filtering people (issue #27) ------------------------------------------------------------
+
+    private fun filterBox() = compose.onNode(hasText("Filter by name") and hasSetTextAction())
+
+    private fun inPicker(name: String) = compose.onAllNodes(hasText(name) and hasClickAction() and hasAnyAncestor(isDialog()))
+
+    private fun listed(name: String) = inPicker(name).fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun theAttendeesFilterNarrowsTheListByPartOfAName() {
+        openForm()
+        field("Attendees").performClick()
+        waitForText("Filter by name")
+        assertTrue(listed("Sam Other") && listed("Robin Guest"))
+
+        filterBox().performTextInput("OBI")
+        compose.waitForIdle()
+        assertTrue(listed("Robin Guest"))
+        assertFalse(listed("Sam Other"))
+
+        filterBox().performTextReplacement("zzz")
+        compose.waitForIdle()
+        assertTrue(shown("No one matches"))
+        assertFalse(listed("Robin Guest"))
+
+        filterBox().performTextReplacement("")
+        compose.waitForIdle()
+        assertTrue(listed("Sam Other") && listed("Robin Guest"))
+        assertFalse(shown("No one matches"))
+    }
+
+    @Test
+    fun peopleTickedStayTickedWhileTheFilterHidesThemAndTheCountFollows() {
+        openForm()
+        field("Attendees").performClick()
+        waitForText("Filter by name")
+        assertFalse(shown("Attendees (1)"))
+
+        filterBox().performTextInput("sam")
+        compose.waitForIdle()
+        inPicker("Sam Other").onFirst().performClick()
+        waitForText("Attendees (1)")
+
+        filterBox().performTextReplacement("robin")
+        compose.waitForIdle()
+        assertFalse(listed("Sam Other"))
+        assertTrue(shown("Attendees (1)"))
+        inPicker("Robin Guest").onFirst().performClick()
+        waitForText("Attendees (2)")
+
+        filterBox().performTextReplacement("")
+        compose.waitForIdle()
+        inPicker("Sam Other").onFirst().performClick()
+        waitForText("Attendees (1)")
+        compose.onNodeWithText("Done").performClick()
+
+        field("Attendees").performClick()
+        waitForText("Attendees (1)")
+        compose.onNodeWithText("Done").performClick()
+        typeSubject("Filtered")
+        pick("Room", "Boardroom (capacity 8)")
+        save()
+        waitForText("Attendees · 1")
+        assertEquals(listOf("person-3"), backend.meetings.single().attendeeIds)
+    }
+
+    @Test
+    fun theOrganiserPickerFiltersAndChoosingClosesIt() {
+        openForm()
+        field("Organiser").performClick()
+        waitForText("Filter by name")
+        assertTrue(listed("Pat Example") && listed("Sam Other") && listed("Robin Guest"))
+
+        filterBox().performTextInput("sam")
+        compose.waitForIdle()
+        assertFalse(listed("Robin Guest"))
+        assertFalse(listed("Pat Example"))
+        inPicker("Sam Other").onFirst().performClick()
+
+        compose.waitUntil(5_000) { !shown("Filter by name") }
+        assertEquals("Sam Other", fieldValue("Organiser"))
+        typeSubject("Sam's meeting")
+        pick("Room", "Boardroom (capacity 8)")
+        save()
+        waitForText("Sam's meeting")
+        assertEquals("person-2", backend.meetings.single().organiserId)
+    }
+
+    @Test
+    fun theOrganiserPickerSaysWhenNoOneMatches() {
+        openForm()
+        field("Organiser").performClick()
+        waitForText("Filter by name")
+        filterBox().performTextInput("nobody")
+        compose.waitForIdle()
+        assertTrue(shown("No one matches"))
+        compose.onNodeWithText("Cancel").performClick()
+        compose.waitUntil(5_000) { !shown("Filter by name") }
+        assertEquals("Pat Example", fieldValue("Organiser"))
+    }
+
+    // Screenshots of the pickers with a filter typed, through the real app so the dialogs' windows are captured.
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun capturePicker(name: String, label: String, typed: String) {
+        openForm()
+        field(label).performClick()
+        waitForText("Filter by name")
+        filterBox().performTextInput(typed)
+        compose.waitForIdle()
+        captureScreenRoboImage("src/test/screenshots/$name.png")
+    }
+
+    @Test
+    fun attendeesFilteredScreenshot() = capturePicker("attendees-filtered", "Attendees", "ob")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun attendeesFilteredDarkScreenshot() = capturePicker("attendees-filtered-dark", "Attendees", "ob")
+
+    @Test
+    fun attendeesNoMatchScreenshot() = capturePicker("attendees-no-match", "Attendees", "zzz")
+
+    @Test
+    fun organiserPickerScreenshot() = capturePicker("organiser-picker", "Organiser", "a")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun organiserPickerDarkScreenshot() = capturePicker("organiser-picker-dark", "Organiser", "a")
 
     // Use cases F.46, F.47 and F.51: every broken rule in one banner, and the form stays put.
     @Test

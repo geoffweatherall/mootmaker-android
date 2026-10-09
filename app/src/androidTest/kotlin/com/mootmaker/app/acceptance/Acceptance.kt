@@ -56,7 +56,6 @@ import com.mootmaker.data.agenda.formatTime
 import com.mootmaker.data.meeting.twelveHourClockHour
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
@@ -502,15 +501,24 @@ fun ComposeTestRule.pickTime(field: String, time: LocalTime) {
 }
 
 /**
- * The meeting form: opens the menu under the [field] labelled so ("Organiser", "Room") and picks
- * [option] from it. The option is looked for in the menu's popup, so a field already showing the
- * same text is never the one tapped.
+ * The meeting form: opens the people picker behind the [field] ("Organiser"), types [name] into its
+ * "Filter by name" box, and taps that person's row in the dialog. The row is looked for in the dialog,
+ * so a field already showing the same text is never the one tapped. Choosing closes the dialog.
  */
-fun ComposeTestRule.pickFromMenu(field: String, option: String) {
+fun ComposeTestRule.pickPerson(field: String, name: String) {
     onNode(hasText(field) and hasClickAction()).performScrollTo().performClick()
-    val inMenu = hasText(option) and hasClickAction() and hasAnyAncestor(isPopup())
-    waitUntil(TIMEOUT_MS) { onAllNodes(inMenu).fetchSemanticsNodes().isNotEmpty() }
-    onNode(inMenu).performScrollTo().performClick()
+    filterPeople(name)
+    val row = hasText(name) and hasClickAction() and hasAnyAncestor(isDialog())
+    waitSaying("$name in the $field picker") { onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
+    onNode(row).performClick()
+    waitSaying("the $field picker to close") { onAllNodes(hasText("Filter by name")).fetchSemanticsNodes().isEmpty() }
+}
+
+/** Types [text] into the open people picker's "Filter by name" box, replacing what was there. */
+fun ComposeTestRule.filterPeople(text: String) {
+    val box = hasText("Filter by name") and hasSetTextAction()
+    waitSaying("the \"Filter by name\" box") { onAllNodes(box).fetchSemanticsNodes().isNotEmpty() }
+    onNode(box).performTextReplacement(text)
 }
 
 /**
