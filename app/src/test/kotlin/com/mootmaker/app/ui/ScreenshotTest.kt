@@ -52,6 +52,7 @@ import com.mootmaker.app.ui.settings.SettingsState
 import com.mootmaker.data.settings.Profile
 import com.mootmaker.data.agenda.DateFormat
 import com.mootmaker.data.api.HomeData
+import com.mootmaker.data.meeting.AttendeeStatus
 import com.mootmaker.data.meeting.MeetingFormReference
 import com.mootmaker.data.meeting.PersonOption
 import com.mootmaker.data.meeting.RoomOption
@@ -194,6 +195,35 @@ class ScreenshotTest {
     @Test
     fun meetingDetailsDark() = capture("meeting-details-dark", dark = true) {
         MeetingDetailsScreen(meetingState(SAMPLE_MEETING), NO_MEETING_ACTIONS)
+    }
+
+    // Issue #26: the tapped answer is drawn chosen at once, with a small spinner, while it saves.
+    @Test
+    fun meetingDetailsSavingAResponse() = capture("meeting-details-saving") {
+        MeetingDetailsScreen(meetingState(SAMPLE_MEETING).copy(pendingResponse = AttendeeStatus.Maybe), NO_MEETING_ACTIONS)
+    }
+
+    @Test
+    fun meetingDetailsSavingAResponseDark() = capture("meeting-details-saving-dark", dark = true) {
+        MeetingDetailsScreen(meetingState(SAMPLE_MEETING).copy(pendingResponse = AttendeeStatus.Maybe), NO_MEETING_ACTIONS)
+    }
+
+    @Test
+    fun homeSavingAResponse() = capture("home-saving") {
+        HomeScreen(
+            HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false, pendingResponses = mapOf("m4" to AttendeeStatus.Going)),
+            null,
+            NO_ACTIONS,
+        )
+    }
+
+    @Test
+    fun homeSavingAResponseDark() = capture("home-saving-dark", dark = true) {
+        HomeScreen(
+            HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false, pendingResponses = mapOf("m4" to AttendeeStatus.Going)),
+            null,
+            NO_ACTIONS,
+        )
     }
 
     @Test

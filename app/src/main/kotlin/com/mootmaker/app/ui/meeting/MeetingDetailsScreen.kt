@@ -178,7 +178,7 @@ private fun Details(meeting: MeetingDetail, data: MeetingDetailsData, state: Mee
         // Only an attendee has anything to answer: the organiser is implicitly going.
         myAttendeeRow(meeting, data.myPersonId)?.let { mine ->
             Caption("Your response")
-            ResponseButtons(selected = mine.status, enabled = !state.responding, onRespond = actions.onRespond)
+            ResponseButtons(selected = mine.status, enabled = state.pendingResponse == null, onRespond = actions.onRespond, pending = state.pendingResponse)
         }
     }
 }
