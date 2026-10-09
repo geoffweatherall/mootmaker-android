@@ -20,6 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 
@@ -143,9 +144,7 @@ class MeetingChangeAcceptanceTest {
         compose.onNodeWithContentDescription("Edit meeting").performClick()
         compose.waitForText("Organiser")
         compose.waitForText("Extend $run")
-        compose.onNode(hasText("09:00") and hasClickAction()).performScrollTo().performClick()
-        compose.waitUntil(30_000) { compose.onAllNodes(hasText("10:00") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("10:00") and hasClickAction()).performScrollTo().performClick()
+        compose.pickTime("End time", LocalTime.of(10, 0))
         compose.onNode(hasText("Save") and hasClickAction()).performScrollTo().performClick()
 
         compose.waitForText("08:00–10:00")

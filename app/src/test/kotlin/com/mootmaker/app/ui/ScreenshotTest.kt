@@ -7,7 +7,13 @@ import androidx.compose.ui.unit.Density
 import com.mootmaker.app.ui.about.AboutScreen
 import com.mootmaker.data.config.Environment
 import androidx.compose.ui.test.onRoot
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performClick
 import com.mootmaker.app.ui.admin.PersonEditor
 import com.mootmaker.app.ui.admin.PersonsActions
 import com.mootmaker.app.ui.admin.PersonsScreen
@@ -55,6 +61,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -282,6 +289,73 @@ class ScreenshotTest {
             NO_ACTIONS,
         )
     }
+
+    /**
+     * The form with its Start time dialog open, on the hour dial or, with [minutes], the minute dial.
+     * A dialog is a window of its own, so this captures the whole screen rather than the compose root.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun captureTimeDialog(
+        name: String,
+        dark: Boolean = false,
+        fontScale: Float = 1f,
+        minutes: Boolean = false,
+        typing: Boolean = false,
+        form: AddMeetingState = filledForm,
+    ) {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = fontScale)) {
+                MootmakerTheme(darkTheme = dark) { AddMeetingScreen(form, noFormActions) }
+            }
+        }
+        compose.onNode(hasText("Start time") and hasClickAction()).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Select time")).fetchSemanticsNodes().isNotEmpty() }
+        if (minutes) compose.onNode(hasContentDescription("Select minutes")).performClick()
+        if (typing) compose.onNode(hasContentDescription("Switch to text input mode")).performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage("src/test/screenshots/$name.png")
+    }
+
+    @Test
+    fun timeDialogHours() = captureTimeDialog("time-dialog-hours")
+
+    @Test
+    fun timeDialogMinutes() = captureTimeDialog("time-dialog-minutes", minutes = true)
+
+    @Test
+    fun timeDialogHoursDark() = captureTimeDialog("time-dialog-hours-dark", dark = true)
+
+    @Test
+    fun timeDialogMinutesDark() = captureTimeDialog("time-dialog-minutes-dark", dark = true, minutes = true)
+
+    /**
+     * At 200% font. The dialog's window takes its density from the device configuration, not from
+     * the screen's LocalDensity, so this sets the system font scale as well. The dial's numbers keep
+     * their size, as Material's do; the title and buttons grow.
+     */
+    @Test
+    fun timeDialogHoursLargeFont() {
+        RuntimeEnvironment.setFontScale(2f)
+        captureTimeDialog("time-dialog-hours-large-font", fontScale = 2f)
+    }
+
+    @Test
+    fun timeDialogMinutesLargeFont() {
+        RuntimeEnvironment.setFontScale(2f)
+        captureTimeDialog("time-dialog-minutes-large-font", fontScale = 2f, minutes = true)
+    }
+
+    private val twelveHourForm get() = filledForm.copy(reference = formReference.copy(timeFormat = TimeFormat.AmPm))
+
+    @Test
+    fun timeDialogHoursTwelveHour() = captureTimeDialog("time-dialog-hours-12-hour", form = twelveHourForm)
+
+    @Test
+    fun timeDialogMinutesTwelveHour() = captureTimeDialog("time-dialog-minutes-12-hour", form = twelveHourForm, minutes = true)
+
+    @Test
+    fun timeDialogTyping() = captureTimeDialog("time-dialog-typing", typing = true)
 
     private val settingsProfile = Profile("p1", "Pat Example", DateFormat.British, TimeFormat.AmPm, "Monday", avatarUrl = null)
     private val settingsState = SettingsState(profile = settingsProfile, loaded = true, name = "Pat Example", dateFormat = DateFormat.British, timeFormat = TimeFormat.AmPm)

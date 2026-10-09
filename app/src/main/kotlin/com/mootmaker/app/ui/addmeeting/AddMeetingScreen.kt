@@ -62,7 +62,6 @@ import com.mootmaker.data.agenda.formatTime
 import com.mootmaker.data.meeting.MeetingFormReference
 import com.mootmaker.data.meeting.attendeeOptions
 import com.mootmaker.data.meeting.organiserOptions
-import com.mootmaker.data.meeting.quarterHours
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -228,17 +227,21 @@ private fun MenuField(label: String, value: String, options: List<Pair<String, S
     }
 }
 
-/** Times are only offered on the quarter hour, so no other minute can be chosen (use case F.41). */
+/**
+ * Opens the "Select time" dialog ([TimeDialog]). Only quarter hours come back from it, so no other
+ * minute can be booked (use case F.41).
+ */
 @Composable
 private fun TimeField(label: String, time: LocalTime, timeFormat: TimeFormat, onPick: (LocalTime) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Box {
-        PickerField(label, shown(time, timeFormat)) { open = true }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.height(320.dp)) {
-            quarterHours.forEach { option ->
-                DropdownMenuItem(text = { Text(shown(option, timeFormat)) }, onClick = { open = false; onPick(option) })
-            }
-        }
+    PickerField(label, shown(time, timeFormat)) { open = true }
+    if (open) {
+        TimeDialog(
+            initial = time,
+            timeFormat = timeFormat,
+            onPick = { open = false; onPick(it) },
+            onDismiss = { open = false },
+        )
     }
 }
 
