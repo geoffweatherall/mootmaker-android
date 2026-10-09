@@ -22,6 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -171,13 +172,13 @@ class AddMeetingAcceptanceTest {
         openForm()
         typeSubject("Backwards $run")
         pick("Room", "Z-Order $run (capacity 6)")
-        compose.pickFromMenu("Start time", "14:00")
-        compose.pickFromMenu("End time", "10:00")
+        compose.pickTime("Start time", LocalTime.of(14, 0))
+        compose.pickTime("End time", LocalTime.of(10, 0))
         save()
         compose.waitForText("End time must be after the start time.")
 
         compose.onNodeWithText("Dismiss").performClick()
-        compose.pickFromMenu("End time", "14:00")
+        compose.pickTime("End time", LocalTime.of(14, 0))
         save()
         compose.waitForText("End time must be after the start time.")
         assertFalse("Backwards $run" in admin.subjectsOn("${LocalDate.now()}"))
@@ -197,8 +198,8 @@ class AddMeetingAcceptanceTest {
         openForm()
         typeSubject("Overnight $run")
         pick("Room", "Z-Night $run (capacity 6)")
-        compose.pickFromMenu("Start time", "23:45")
-        compose.pickFromMenu("End time", "00:15")
+        compose.pickTime("Start time", LocalTime.of(23, 45))
+        compose.pickTime("End time", LocalTime.of(0, 15))
         save()
 
         compose.waitForText("End time must be after the start time.")
@@ -264,8 +265,8 @@ class AddMeetingAcceptanceTest {
             compose.waitForText(today.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")))
             typeSubject("American $run")
             pick("Room", "Z-Usa $run (capacity 6)")
-            compose.pickFromMenu("Start time", "02:00 PM")
-            compose.pickFromMenu("End time", "03:30 PM")
+            compose.pickTime("Start time", LocalTime.of(14, 0))
+            compose.pickTime("End time", LocalTime.of(15, 30))
             save()
 
             compose.waitForText("Attendees · 0")
