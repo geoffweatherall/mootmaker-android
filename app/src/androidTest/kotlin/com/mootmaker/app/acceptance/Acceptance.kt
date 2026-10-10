@@ -369,7 +369,7 @@ fun ComposeTestRule.waitForTextContaining(text: String) =
  * Waits as [ComposeTestRule.waitUntil] does, but a timeout says what it waited for and what was on
  * screen instead, which is all a cloud session gets to see of a failure (its annotation).
  */
-private fun ComposeTestRule.waitSaying(what: String, condition: () -> Boolean) {
+internal fun ComposeTestRule.waitSaying(what: String, condition: () -> Boolean) {
     try {
         waitUntil(TIMEOUT_MS, condition)
     } catch (timeout: ComposeTimeoutException) {
@@ -508,7 +508,13 @@ fun ComposeTestRule.pickTime(field: String, time: LocalTime) {
  * holds the same text once [name] is typed into it. Choosing closes the dialog.
  */
 fun ComposeTestRule.pickPerson(field: String, name: String) {
-    onNode(hasText(field) and hasClickAction()).performScrollTo().performClick()
+    // A real tap: the semantics click lands on the disabled text field inside the tap target and does
+    // nothing. The tap is tried twice, as it once "failed to inject" while the keyboard was closing.
+    val target = hasText(field) and hasClickAction()
+    runCatching { onNode(target).performScrollTo().performClick() }.onFailure {
+        waitForIdle()
+        onNode(target).performScrollTo().performClick()
+    }
     filterPeople(name)
     val row = hasText(name) and hasClickAction() and !hasSetTextAction() and hasAnyAncestor(isDialog())
     waitSaying("$name in the $field picker") { onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }

@@ -1,5 +1,6 @@
 package com.mootmaker.app.acceptance
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import com.mootmaker.app.MainActivity
@@ -70,7 +72,8 @@ class CacheAcceptanceTest {
     private fun openCalendar() {
         // Home may have been scrolled down to a row, taking the Calendar button out of view.
         compose.scrollClearOfTheBottom(hasScrollAction(), hasText("Calendar") and hasClickAction())
-        compose.onNode(hasText("Calendar") and hasClickAction()).performClick()
+        // A click action, not an injected tap, which failed once with "Failed to inject touch input".
+        compose.onNode(hasText("Calendar") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForText("This week")
     }
 
