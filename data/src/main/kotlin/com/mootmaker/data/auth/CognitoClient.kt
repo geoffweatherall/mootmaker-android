@@ -151,17 +151,28 @@ class CognitoClient(
     /**
      * Starts a password reset; Cognito emails a code. With prevent_user_existence_errors on the
      * pool, an email with no account succeeds the same way, so this reveals nothing (use case C.17).
+     *
+     * Cognito has once answered an unknown email with "no registered/verified email" instead
+     * (mootmaker-android#45). That says the address has no usable account, so it is treated as sent
+     * too: the next step looks the same either way, and no code comes.
      */
     suspend fun forgotPassword(email: String) = withContext(io) {
-        call(
-            "ForgotPassword",
-            buildJsonObject {
-                put("ClientId", clientId)
-                put("Username", email)
-            },
-        )
+        try {
+            call(
+                "ForgotPassword",
+                buildJsonObject {
+                    put("ClientId", clientId)
+                    put("Username", email)
+                },
+            )
+        } catch (refused: CognitoException) {
+            if (!refused.saysNoVerifiedAddress()) throw refused
+        }
         Unit
     }
+
+    private fun CognitoException.saysNoVerifiedAddress() =
+        type == "InvalidParameterException" && message.contains("no registered/verified email", ignoreCase = true)
 
     /** Sets a new password with the emailed code. It doesn't sign in: the caller does that next. */
     suspend fun confirmForgotPassword(email: String, code: String, newPassword: String) = withContext(io) {
