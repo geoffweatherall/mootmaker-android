@@ -55,6 +55,8 @@ on:
 permissions:
   id-token: write
   contents: read
+  # Read this run's other jobs, for fail-fast (below).
+  actions: read
 
 jobs:
   build:
@@ -168,6 +170,12 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE }}
           aws-region: us-east-1
 
+      # Stop early once another job in this run has failed: a release that cannot tag is already
+      # lost, and the rest of this build would only spend time and AWS cost. Deploys are gated with
+      # `fail-fast check` and only the test command is wrapped - never terraform, which must not be
+      # interrupted mid-apply. See mootmaker/designs/cost-reduction.md, Measure 3.
+      - uses: geoffweatherall/mootmaker-release/.github/actions/fail-fast@main
+
       - name: Create the environment
         id: env
         working-directory: siblings/mootmaker-ephemeral-envs
@@ -176,6 +184,7 @@ jobs:
           JAVA_HOME: ${{ env.JAVA_HOME_25_X64 }}
         run: |
           set -o pipefail
+          fail-fast check
           # stderr is kept so that a create that fails partway can still be named and torn down.
           ./create-ephemeral-env.sh "${ENV_KIND}" 2> >(tee "$RUNNER_TEMP/create-stderr.log" >&2) > "$RUNNER_TEMP/create-stdout.log"
           name="$(tail -n1 "$RUNNER_TEMP/create-stdout.log")"
@@ -234,9 +243,9 @@ jobs:
           # build above, so Gradle reuses those APKs rather than building different ones.
           script: |
             adb reverse tcp:8787 tcp:8787
-            bash -c 'set -o pipefail; ./gradlew :app:connectedReleaseAndroidTest -PmootmakerVersion=${{ inputs.version }} -PmootmakerTestBuildType=release $ACCEPTANCE_ARGS 2>&1 | tee -a build.log'
+            fail-fast run -- bash -c 'set -o pipefail; ./gradlew :app:connectedReleaseAndroidTest -PmootmakerVersion=${{ inputs.version }} -PmootmakerTestBuildType=release $ACCEPTANCE_ARGS 2>&1 | tee -a build.log'
             adb install -r app/build/outputs/apk/release/app-release.apk
-            bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENV_NAME" smoke/sign-up-lifecycle.yaml 2>&1 | tee maestro.log'
+            fail-fast run -- bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENV_NAME" smoke/sign-up-lifecycle.yaml 2>&1 | tee maestro.log'
 
       - name: Summarise failures
         if: always()
