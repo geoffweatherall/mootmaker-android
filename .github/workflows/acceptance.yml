@@ -30,6 +30,8 @@ concurrency:
 permissions:
   id-token: write
   contents: read
+  # release-build.yml asks for it (fail-fast), and a called workflow gets no more than this grants.
+  actions: read
 
 jobs:
   release-build:
