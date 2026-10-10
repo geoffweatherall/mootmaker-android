@@ -157,6 +157,27 @@ class CognitoClientTest {
         assertEquals("a-new-pw-456", body["Password"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun forgotPasswordForAnAddressWithNoVerifiedAccountLooksSent() = runTest {
+        server.enqueue(
+            json(400, """{"__type":"InvalidParameterException","message":"Cannot reset password for the user as there is no registered/verified email or phone_number"}"""),
+        )
+
+        client.forgotPassword("nobody@example.com")
+    }
+
+    @Test
+    fun forgotPasswordStillReportsOtherRefusals() = runTest {
+        server.enqueue(json(400, """{"__type":"LimitExceededException","message":"Attempt limit exceeded, please try after some time."}"""))
+
+        try {
+            client.forgotPassword("pat@example.com")
+            fail("Expected the refusal to be reported")
+        } catch (expected: CognitoException) {
+            assertEquals("LimitExceededException", expected.type)
+        }
+    }
+
     private suspend fun signInFailure(): CognitoException {
         try {
             client.signIn("demo@mootmaker.com", "wrong")
