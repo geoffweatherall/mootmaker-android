@@ -30,11 +30,23 @@ env:
 - tapOn:
     text: "Sign in"
     below: "Password"
+# Signed in: Home's entry points show first.
 - extendedWaitUntil:
-    visible: "Today|No meetings today or tomorrow\\."
+    visible: "Rooms today"
+    timeout: 30000
+# The agenda sits below "Needs your response", so how far down depends on how many invitations the
+# demo user has waiting in production. Scroll to it rather than expect it on screen.
+- scrollUntilVisible:
+    element:
+      text: "Today|No meetings today or tomorrow\\."
+    direction: DOWN
     timeout: 30000
 - assertNotVisible: "Try again"
 # Room availability renders (read-only): either the room cards or the no-rooms message.
+- scrollUntilVisible:
+    element:
+      text: "Rooms today"
+    direction: UP
 - tapOn: "Rooms today"
 - extendedWaitUntil:
     visible: "Room availability"
