@@ -53,7 +53,7 @@ data class MeetingView(
 /**
  * The one in-memory store of what the app has seen: the reference data, days, and meetings looked
  * up by id. Every read screen draws from it, and the live channel keeps it honest. See
- * mootmaker/designs/android-cache.md for the decisions behind every rule here.
+ * mootmaker/designs/archive/android-cache.md for the decisions behind every rule here.
  *
  * Screens **watch** what they show. A watch fetches anything not yet known, and while it lasts, an
  * invalidation of what it shows is refetched at once; an invalidated thing nobody watches only

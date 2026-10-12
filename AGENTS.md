@@ -3,7 +3,7 @@
 A native Android app — a second frontend for the same API as `mootmaker-webapp`.
 
 **Status:** at parity with the webapp; the milestones M0 to M10 of
-[`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
+[`designs/archive/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/archive/android-app.md)
 in the hub repository are built. New work starts with its own design or issue, as anywhere in
 mootmaker. [`testing-strategy.md`](testing-strategy.md) describes the test layers.
 

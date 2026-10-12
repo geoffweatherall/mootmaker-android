@@ -80,7 +80,7 @@ class AppContainer(
 
     /**
      * The one in-memory store of what the app has seen, which every read screen draws from and the
-     * live channel keeps honest (mootmaker/designs/android-cache.md). Emptied whenever the session
+     * live channel keeps honest (mootmaker/designs/archive/android-cache.md). Emptied whenever the session
      * signs out, which every identity change (sign-out, account deletion, environment switch) does.
      */
     val workspace = WorkspaceStore(ApolloWorkspaceApi(apollo = ::apolloClient, idToken = session::idToken), scope)

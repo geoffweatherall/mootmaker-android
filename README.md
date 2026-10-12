@@ -7,7 +7,7 @@ reset your password; your agenda, room availability, meeting details and person 
 edit, cancel and respond to meetings, with live updates; settings, avatars and deleting your
 account; and, for admins, managing rooms and people. Each release attaches the signed APK to its
 [mootmaker-release GitHub Release](https://github.com/geoffweatherall/mootmaker-release/releases/latest).
-The plan was [`designs/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-app.md)
+The plan was [`designs/archive/android-app.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/archive/android-app.md)
 in the hub repository.
 
 ## Layout
@@ -53,7 +53,7 @@ from the lock screen causes), and a response in flight when its date changed is 
 resume refetches only what is shown and more than five minutes old. This device's own writes
 invalidate what they change, and signing out empties the store. The design, and why it is not
 Apollo's normalized cache, is
-[`designs/android-cache.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-cache.md).
+[`designs/archive/android-cache.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/archive/android-cache.md).
 
 ## Errors
 
@@ -78,7 +78,7 @@ Every screen shows an error one of two ways, with the shared components in
    checks before calling the API.
 
 The design is
-[`designs/android-error-display.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/android-error-display.md).
+[`designs/archive/android-error-display.md`](https://github.com/geoffweatherall/mootmaker/blob/main/designs/archive/android-error-display.md).
 
 ## Configuration and environments
 

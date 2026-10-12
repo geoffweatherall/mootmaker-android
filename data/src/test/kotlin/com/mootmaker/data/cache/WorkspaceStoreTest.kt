@@ -24,7 +24,7 @@ import java.time.LocalDate
 /**
  * The store's rules, each pinned with a fake API whose every answer the test releases by hand, so
  * the order of requests, invalidations and answers is exactly the one written. See
- * mootmaker/designs/android-cache.md. The cases marked "webapp:" are the webapp's own
+ * mootmaker/designs/archive/android-cache.md. The cases marked "webapp:" are the webapp's own
  * daysInvalidated/evictAndRefetch/reconcileLink scenarios, translated, so both clients keep the same
  * rules.
  */
