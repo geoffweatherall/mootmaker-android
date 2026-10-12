@@ -95,6 +95,9 @@ jobs:
         if: always()
         with:
           name: android-smoke-${{ inputs.environment }}-${{ github.run_attempt }}
+          # Maestro writes its failure screenshots under a hidden .maestro folder inside
+          # maestro-debug, and upload-artifact skips hidden files unless asked.
+          include-hidden-files: true
           path: |
             smoke.log
             maestro-report.xml
