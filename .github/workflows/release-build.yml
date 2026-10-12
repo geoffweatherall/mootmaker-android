@@ -260,6 +260,8 @@ jobs:
         if: always()
         with:
           name: android-acceptance-reports-${{ inputs.version }}-${{ github.run_attempt }}
+          # Maestro's failure screenshots are under a hidden .maestro folder in maestro-debug.
+          include-hidden-files: true
           path: |
             build.log
             maestro.log
