@@ -41,7 +41,7 @@ jobs:
         with:
           repository: geoffweatherall/mootmaker-android
           ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: ${{ inputs.artifact-name }}
           path: apk
@@ -91,10 +91,13 @@ jobs:
       - name: Summarise failures
         if: always()
         run: python3 .github/scripts/summarise-failures.py "maestro-report.xml"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: android-smoke-${{ inputs.environment }}-${{ github.run_attempt }}
+          # Maestro writes its failure screenshots under a hidden .maestro folder inside
+          # maestro-debug, and upload-artifact skips hidden files unless asked.
+          include-hidden-files: true
           path: |
             smoke.log
             maestro-report.xml
