@@ -47,7 +47,7 @@ interface HomeSource {
 
 /**
  * Home over the [WorkspaceStore]: the reference data and the window's days. Nothing here fetches;
- * the store does, and keeps what it holds honest (mootmaker/designs/android-cache.md).
+ * the store does, and keeps what it holds honest (mootmaker/designs/archive/android-cache.md).
  */
 class HomeRepository(private val store: WorkspaceStore) : HomeSource {
     override fun retry() = store.retry()

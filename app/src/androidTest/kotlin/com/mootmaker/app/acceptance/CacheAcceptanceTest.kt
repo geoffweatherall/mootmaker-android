@@ -24,7 +24,7 @@ import java.util.UUID
 
 /**
  * Use cases 144 to 149: another user changes what this one is viewing, and the app's store of what
- * it has seen follows (mootmaker/designs/android-cache.md). See [Acceptance].
+ * it has seen follows (mootmaker/designs/archive/android-cache.md). See [Acceptance].
  *
  * User B is the app, signed in as the admin fixture. User A is the standard fixture, making the same
  * API calls the webapp makes; the rooms are set up by the admin, since only an admin may create one.

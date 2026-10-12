@@ -1,4 +1,4 @@
-// The host side of reading real emailed codes in device tests (mootmaker/designs/android-app.md,
+// The host side of reading real emailed codes in device tests (mootmaker/designs/archive/android-app.md,
 // Decision 6 and Q5-A). Codes come only through mootmaker-email-testing's own client, never a
 // Kotlin copy of it. Tests on the emulator reach this through `adb reverse tcp:8787 tcp:8787`;
 // Maestro runs on the host and reaches it directly.
