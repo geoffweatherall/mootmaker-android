@@ -231,7 +231,9 @@ class AddMeetingFlowTest {
         typeSubject("Sam's meeting")
         pick("Room", "Boardroom (capacity 8)")
         save()
-        waitForText("Sam's meeting")
+        // The details screen, not the subject: the subject is already on screen in the form field,
+        // so waiting for it alone can read the backend before the save arrives.
+        waitForText("Attendees · 0")
         assertEquals("person-2", backend.meetings.single().organiserId)
     }
 
