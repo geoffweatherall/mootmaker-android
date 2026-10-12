@@ -62,7 +62,7 @@ class LiveUpdatesFlowTest {
 
     private fun broadcast(vararg dates: String) = runBlocking { live.push(LiveEvent.DaysChanged(dates.toList())) }
 
-    // M6: a meeting someone else books appears on the open home screen without a refresh.
+    // A meeting someone else books appears on the open home screen without a refresh.
     @Test
     fun aMeetingBookedByAnotherClientAppearsOnHome() {
         signInToHome()

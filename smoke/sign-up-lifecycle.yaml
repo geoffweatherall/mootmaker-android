@@ -1,6 +1,6 @@
-# Release smoke for the `test` stage (design: Release pipeline, M8): sign up with a real emailed
-# code, use the app, then delete the account, run by Maestro against the RELEASE APK. It mirrors the
-# webapp's test-stage.spec.ts, and leaves nothing behind. Codes come from the email helper
+# Release smoke for the `test` stage: sign up with a real emailed
+# code, use the app, then delete the account, run by Maestro against the RELEASE APK. It mirrors
+# mootmaker-release's web test-stage.spec.ts, and leaves nothing behind. Codes come from the email helper
 # (email-helper/server.mjs) on the host, which the workflow starts. Never run against production:
 # it writes. See .github/workflows/smoke.yml; release-build.yml also runs it against its own
 # ephemeral environment, which is how a pull request proves it.

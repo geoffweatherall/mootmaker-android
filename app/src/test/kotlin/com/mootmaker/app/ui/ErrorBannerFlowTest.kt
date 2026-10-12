@@ -35,10 +35,11 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /**
- * The README's "Errors" rule on every screen, through the real app wiring against [FakeBackend]:
- * with the content scrolled away from the top, the screen's error is DISPLAYED (in the viewport, not
- * merely in the tree), it can be dismissed, and a failed refresh offers Try again. The window is short
- * (600dp) so forms and lists genuinely scroll, which is what hid the errors in #35.
+ * The error rule in docs/architecture.md on every screen, through the real app wiring against
+ * [FakeBackend]: with the content scrolled away from the top, the screen's error is DISPLAYED (in
+ * the viewport, not merely in the tree), it can be dismissed, and a failed refresh offers Try again.
+ * The window is short (600dp) so forms and lists genuinely scroll and an error could be pushed out of
+ * view (#35).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

@@ -29,8 +29,7 @@ import java.util.UUID
  * Use cases I.74 to I.76, N.100 to N.102, N.105 and Q.143 against a real environment. See [Acceptance].
  *
  * The fixture users are shared with the other acceptance cases, so every case that changes one puts
- * it back as it found it, in a `finally`: there is no sign-up in the app yet (M8), so there is no
- * fresh account to spend instead, as the webapp's suite does.
+ * it back as it found it, in a `finally`.
  */
 class SettingsAcceptanceTest {
     @get:Rule

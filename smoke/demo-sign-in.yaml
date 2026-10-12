@@ -1,8 +1,7 @@
 # Release smoke: the read-only demo sign-in, run by Maestro against the RELEASE APK (design Q5-B).
 # The app is pointed at ENVIRONMENT through the hidden developer setting, as a person would do it,
 # signs in with the demo credentials it pre-fills, the home agenda must render, and so must room
-# availability (M2). Nothing is
-# written, so it is safe against production. See .github/workflows/smoke.yml.
+# availability. Nothing is written, so it is safe against production. See .github/workflows/smoke.yml.
 appId: com.mootmaker.android
 env:
   ENVIRONMENT: production

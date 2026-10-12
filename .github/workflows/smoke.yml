@@ -4,7 +4,7 @@
 # request.
 #   - production: the read-only demo sign-in (smoke/demo-sign-in.yaml). Nothing is written.
 #   - anything else (test): sign up with a real emailed code, use the app, delete the account
-#     (smoke/sign-up-lifecycle.yaml), the shape of the webapp's test-stage.spec.ts (design M8). Codes
+#     (smoke/sign-up-lifecycle.yaml), the shape of mootmaker-release's web test-stage.spec.ts. Codes
 #     come from the email helper, which needs AWS to read the shared queue. release-build.yml runs
 #     the same flow against its own ephemeral environment, which is how a pull request proves it.
 name: Smoke

@@ -22,7 +22,7 @@ import com.mootmaker.data.graphql.UpdateRoomMutation
 import com.mootmaker.data.graphql.type.RoomColor as ApiRoomColor
 import com.mootmaker.data.graphql.type.RoomInput as ApiRoomInput
 
-/** The admin screens' reads and writes (M9). The server enforces who may call them; see Admin.graphql. */
+/** The admin screens' reads and writes. The server enforces who may call them; see Admin.graphql. */
 interface AdminSource {
     /** Every room, sorted by name as the webapp sorts them. */
     suspend fun rooms(): List<AdminRoom>
