@@ -71,9 +71,10 @@ class DemoUserE2eTest {
         waitFor { shown("Home") }
 
         // The home query returned: either the agenda (D.22/D.23) or the no-person message (D.24).
-        waitFor {
-            shown("Today") || shown("No meetings today or tomorrow.") || shown(NO_PERSON) || shown("Try again")
-        }
+        // The agenda is a lazy list, so wait on its "Needs your response" heading, which is always
+        // near the top. "Today" sits below every unanswered invitation and is not composed when
+        // production's demo user has enough of them to push it off screen.
+        waitFor { shown("Needs your response") || shown(NO_PERSON) || shown("Try again") }
         check(!shown("Try again")) { "The home query failed" }
 
         // B.13: signing out returns to sign-in.
