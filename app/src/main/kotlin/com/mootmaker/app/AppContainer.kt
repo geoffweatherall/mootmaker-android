@@ -83,7 +83,11 @@ class AppContainer(
      * live channel keeps honest (mootmaker/designs/archive/android-cache.md). Emptied whenever the session
      * signs out, which every identity change (sign-out, account deletion, environment switch) does.
      */
-    val workspace = WorkspaceStore(ApolloWorkspaceApi(apollo = ::apolloClient, idToken = session::idToken), scope)
+    val workspace = WorkspaceStore(
+        ApolloWorkspaceApi(apollo = ::apolloClient, idToken = session::idToken),
+        scope,
+        log = { android.util.Log.i(LIVE_LOG_TAG, "store: $it") },
+    )
 
     init {
         scope.launch { session.state.collect { if (it is SessionState.SignedOut) workspace.clear() } }
@@ -119,6 +123,7 @@ class AppContainer(
         http = http,
         httpEndpoint = { session.config.filterIsInstance<ConfigState.Ready>().first().config.graphqlApiUrl },
         idToken = session::idToken,
+        log = { android.util.Log.i(LIVE_LOG_TAG, "socket: $it") },
     )
 
     private val _liveEvents = MutableSharedFlow<LiveEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -150,8 +155,11 @@ class AppContainer(
         scope.launch { session.start() }
     }
 
-    private companion object {
-        fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    companion object {
+        /** The logcat tag for live-update diagnostics; the acceptance run keeps these lines. */
+        const val LIVE_LOG_TAG = "MootmakerLive"
+
+        private fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
