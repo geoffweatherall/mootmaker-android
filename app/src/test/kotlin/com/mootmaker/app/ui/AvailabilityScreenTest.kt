@@ -133,7 +133,7 @@ class AvailabilityScreenTest {
         compose.onNodeWithContentDescription("Next day").assertIsDisplayed()
     }
 
-    // Use case E.37's entry point (the form itself arrives in M4).
+    // Use case E.37's entry point.
     @Test
     fun addMeetingIsOfferedFromThisScreen() {
         var added = false

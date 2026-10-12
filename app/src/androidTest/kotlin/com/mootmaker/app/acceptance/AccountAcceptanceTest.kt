@@ -60,8 +60,7 @@ class AccountAcceptanceTest {
     /**
      * Presses the form's button through its click action rather than an injected tap. Closing the
      * keyboard re-lays the form out, so a tap aimed at where the button was can land on the Sign in
-     * link below it, on the keyboard, or on nothing (an acceptance run on PR #37 pressed Reset
-     * password and nothing happened). The flows are what is under test here, not touch targeting.
+     * link below it, on the keyboard, or on nothing. The flows are what is under test here, not touch targeting.
      */
     private fun press(text: String) {
         scenario?.onActivity { activity ->

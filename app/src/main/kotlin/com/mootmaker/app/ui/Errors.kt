@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * The one way to show an error that is not about a single field and not inside a dialog (the
- * "Errors" rule in the README). Place it ABOVE a screen's scrolling content, never inside the
+ * error rule in docs/architecture.md). Place it ABOVE a screen's scrolling content, never inside the
  * scroll, so it cannot scroll out of view. Every message is shown in full, one per line; the banner
  * grows to a third of the screen's height and then scrolls within itself. Renders nothing when
  * [messages] is empty. [onRetry], when given, adds "Try again" (for a failed refresh).
