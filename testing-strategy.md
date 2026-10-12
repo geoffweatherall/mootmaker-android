@@ -1,9 +1,8 @@
 # Testing strategy
 
 How the Android app is tested, layer by layer. The project-wide picture, with the API's and the
-webapp's layers beside these, is
-[`docs/reference/testing-strategy.md`](https://github.com/geoffweatherall/mootmaker/blob/main/docs/reference/testing-strategy.md)
-in the hub repository. As everywhere in mootmaker, **a green acceptance run against a real deployed
+webapp's layers beside these, is the hub's
+[testing overview](https://github.com/geoffweatherall/mootmaker/blob/main/docs/overview/testing.md). As everywhere in mootmaker, **a green acceptance run against a real deployed
 environment is the definition of working**; the layers below it exist to fail sooner and more cheaply.
 
 ## Layers
@@ -36,7 +35,9 @@ environment is the definition of working**; the layers below it exist to fail so
 - **Screenshots cover every screen in light and dark**, and the busiest screens at Android's largest
   font size, where text must wrap rather than clip. After an intended visual change, re-record with
   `./gradlew :app:recordRoborazziDebug` and commit the PNGs.
-- **Error displays are tested as *displayed* (in the viewport, via `assertIsDisplayed` after scrolling the content), not merely present in the tree**: that is the difference that hid the errors in #35.
+- **Error displays are tested as *displayed***, in the viewport (`assertIsDisplayed` after scrolling the
+  content), not merely present in the tree: an error that has scrolled out of view is in the tree but
+  invisible to the user.
 - **Tests find elements by text and content description**, the same labels TalkBack reads, not by
   test tags.
 
@@ -44,7 +45,7 @@ environment is the definition of working**; the layers below it exist to fail so
 
 Covered by the large-font screenshots and by content descriptions on every icon-only control (the
 tests depend on them). Compose's automated accessibility checks do not run under Robolectric, so
-there is no automated contrast or touch-target check today, and no TalkBack walk-through has been recorded.
+there is no automated contrast or touch-target check, and no recorded TalkBack walk-through.
 
 ## Reading failures from a cloud session
 
