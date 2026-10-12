@@ -33,10 +33,10 @@ class SignInScreenTest {
     private var retried = 0
 
     private fun show(config: SignInConfig = SignInConfig.Ready(hasDemoUser = false)): SignInViewModel {
-        val viewModel = SignInViewModel { email, password ->
+        val viewModel = SignInViewModel(signIn = { email, password ->
             attempts += email to password
             failure?.let { throw it }
-        }
+        })
         compose.setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             MootmakerTheme {

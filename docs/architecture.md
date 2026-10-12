@@ -86,6 +86,10 @@ sequenceDiagram
 - **The ID token is the API credential.** `Session.idToken()` refreshes it when it is within five minutes
   of expiry. If Cognito refuses the refresh (the pool was recreated, or the refresh token expired), the app
   signs out cleanly and says the session expired. It does not loop or crash.
+- **An unconfirmed sign-up is not a dead end.** When Cognito refuses sign-in with
+  `UserNotConfirmedException`, the sign-in screen asks for the emailed code, offers **Send a new code**,
+  and then confirms and signs in with the password already entered. The sign-up code step can resend
+  too (use case 150).
 - **Navigation follows the session.** Signing in replaces the sign-in screen with Home. Signing out clears
   the back stack, so Back can never return to a signed-in screen.
 

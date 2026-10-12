@@ -59,6 +59,9 @@ fun SignInScreen(
     onAbout: () -> Unit,
     sessionExpired: Boolean = false,
     onDismissError: () -> Unit = {},
+    onCodeChange: (String) -> Unit = {},
+    onConfirm: () -> Unit = {},
+    onResendCode: () -> Unit = {},
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.safeDrawingPadding().imePadding()) {
@@ -78,7 +81,9 @@ fun SignInScreen(
                 Spacer(Modifier.height(24.dp))
                 when (config) {
                     is SignInConfig.Failed -> ConfigFailed(config.environmentName, onRetryConfig)
-                    else -> Form(state, config, sessionExpired, onEmailChange, onPasswordChange, onSubmit)
+                    else -> if (state.unconfirmed) {
+                        ConfirmForm(state, onCodeChange, onConfirm, onResendCode)
+                    } else Form(state, config, sessionExpired, onEmailChange, onPasswordChange, onSubmit)
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -159,6 +164,60 @@ private fun Form(
                     Text("Sign in")
                 }
             }
+        }
+    }
+}
+
+/**
+ * The account's sign-up was never confirmed: ask for the emailed code, or send a new one, then sign
+ * in with the password already entered (use case 150).
+ */
+@Composable
+private fun ConfirmForm(
+    state: SignInState,
+    onCodeChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onResendCode: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "This account hasn't been confirmed yet. Enter the verification code we emailed to ${state.email.trim()}, or send a new one.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (state.codeSent) {
+                Text(
+                    "We've sent a new code. It can take a minute to arrive.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+            OutlinedTextField(
+                value = state.code,
+                onValueChange = onCodeChange,
+                label = { Text("Verification code") },
+                singleLine = true,
+                isError = state.codeError != null,
+                supportingText = state.codeError?.let { { Text(it) } },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onConfirm() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(onClick = onConfirm, enabled = !state.signingIn, modifier = Modifier.fillMaxWidth()) {
+                if (state.signingIn) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Confirm")
+                }
+            }
+            TextButton(onClick = onResendCode, enabled = !state.sendingCode) { Text("Send a new code") }
         }
     }
 }

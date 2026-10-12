@@ -21,6 +21,8 @@ data class SignUpState(
     /** A failure from Cognito or the network, shown above the form. */
     val error: String? = null,
     val busy: Boolean = false,
+    /** A new code was sent on request (use case 150). */
+    val codeSent: Boolean = false,
 )
 
 /**
@@ -32,6 +34,7 @@ data class SignUpState(
 class SignUpViewModel(
     private val signUp: suspend (email: String, password: String, name: String) -> Unit,
     private val confirm: suspend (email: String, code: String, password: String) -> Unit,
+    private val sendNewCode: suspend (email: String) -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(SignUpState())
     val state: StateFlow<SignUpState> = _state.asStateFlow()
@@ -67,6 +70,16 @@ class SignUpViewModel(
             confirm(current.email.trim(), current.code.trim(), current.password)
             // Signed in: the passwords are no longer needed in memory.
             _state.update { it.copy(password = "", code = "") }
+        }
+    }
+
+    /** For a code that is slow to arrive, or was deleted (use case 150). */
+    fun resendCode() {
+        val current = _state.value
+        if (current.busy) return
+        launch("Could not send a new code.") {
+            sendNewCode(current.email.trim())
+            _state.update { it.copy(codeSent = true) }
         }
     }
 

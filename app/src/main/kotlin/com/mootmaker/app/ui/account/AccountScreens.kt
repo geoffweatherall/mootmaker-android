@@ -55,9 +55,10 @@ data class SignUpActions(
     val onSubmitCode: () -> Unit,
     val onSignIn: () -> Unit,
     val onDismissError: () -> Unit = {},
+    val onResendCode: () -> Unit = {},
 )
 
-/** Use cases A.1 to A.4: the details step, then the emailed code. */
+/** Use cases A.1 to A.4 and 150: the details step, then the emailed code, which can be sent again. */
 @Composable
 fun SignUpScreen(state: SignUpState, actions: SignUpActions) {
     AccountPage("Sign up", state.error, actions.onDismissError) {
@@ -84,8 +85,16 @@ fun SignUpScreen(state: SignUpState, actions: SignUpActions) {
         } else {
             FormCard {
                 SentTo(state.email.trim(), "Enter it below to finish creating your account.")
+                if (state.codeSent) {
+                    Text(
+                        "We've sent a new code. It can take a minute to arrive.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 TextInput("Verification code", state.code, actions.onCode, state.missing, keyboardType = KeyboardType.Number, onDone = actions.onSubmitCode)
                 SubmitButton("Confirm", state.busy, actions.onSubmitCode)
+                TextButton(onClick = actions.onResendCode, enabled = !state.busy) { Text("Send a new code") }
             }
         }
     }

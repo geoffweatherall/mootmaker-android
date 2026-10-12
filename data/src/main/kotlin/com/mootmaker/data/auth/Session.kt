@@ -107,6 +107,9 @@ class Session(
         signIn(email, password)
     }
 
+    /** Emails a new sign-up code, for an account whose sign-up was never confirmed (use case 150). */
+    suspend fun resendConfirmationCode(email: String) = cognito().resendConfirmationCode(email)
+
     /** Asks Cognito to email a reset code. Succeeds the same way for an email with no account (C.17). */
     suspend fun forgotPassword(email: String) = cognito().forgotPassword(email)
 

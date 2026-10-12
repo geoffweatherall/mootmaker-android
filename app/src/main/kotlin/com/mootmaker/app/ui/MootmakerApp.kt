@@ -136,7 +136,7 @@ fun MootmakerApp(container: AppContainer) {
     CompositionLocalProvider(LocalAvatarLoader provides avatarLoader) {
     NavHost(navController, startDestination = if (signedIn) Routes.HOME else Routes.SIGN_IN) {
         composable(Routes.SIGN_IN) {
-            val viewModel = viewModel { SignInViewModel(session::signIn) }
+            val viewModel = viewModel { SignInViewModel(session::signIn, session::confirmSignUp, session::resendConfirmationCode) }
             val state by viewModel.state.collectAsStateWithLifecycle()
             val config = when (val current = configState) {
                 is ConfigState.Loading -> SignInConfig.Loading
@@ -158,11 +158,14 @@ fun MootmakerApp(container: AppContainer) {
                 onAbout = { navController.navigate(Routes.ABOUT) },
                 sessionExpired = sessionExpired,
                 onDismissError = viewModel::dismissError,
+                onCodeChange = viewModel::onCodeChange,
+                onConfirm = viewModel::confirm,
+                onResendCode = viewModel::resendCode,
             )
         }
         // Both finish by signing in, and the session change then replaces the whole back stack with home.
         composable(Routes.SIGN_UP) {
-            val viewModel = viewModel { SignUpViewModel(session::signUp, session::confirmSignUp) }
+            val viewModel = viewModel { SignUpViewModel(session::signUp, session::confirmSignUp, session::resendConfirmationCode) }
             val state by viewModel.state.collectAsStateWithLifecycle()
             SignUpScreen(
                 state = state,
@@ -175,6 +178,7 @@ fun MootmakerApp(container: AppContainer) {
                     onSubmitCode = viewModel::submitCode,
                     onSignIn = { navController.popBackStack(Routes.SIGN_IN, inclusive = false) },
                     onDismissError = viewModel::dismissError,
+                    onResendCode = viewModel::resendCode,
                 ),
             )
         }
