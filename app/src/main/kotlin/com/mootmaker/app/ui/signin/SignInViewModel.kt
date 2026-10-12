@@ -2,6 +2,7 @@ package com.mootmaker.app.ui.signin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mootmaker.data.auth.CognitoException
 import com.mootmaker.data.auth.signInErrorMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,11 +18,24 @@ data class SignInState(
     /** A failure from Cognito or the network, shown above the form. */
     val error: String? = null,
     val signingIn: Boolean = false,
+    /**
+     * Cognito refused sign-in because the account's sign-up was never confirmed, so the screen asks
+     * for the emailed code instead of showing an error (use case 150).
+     */
+    val unconfirmed: Boolean = false,
+    val code: String = "",
+    val codeError: String? = null,
+    /** A new code was sent on request. */
+    val codeSent: Boolean = false,
+    val sendingCode: Boolean = false,
 )
 
 /** Sign-in form state. Navigation away on success follows the session, not this ViewModel. */
 class SignInViewModel(
     private val signIn: suspend (email: String, password: String) -> Unit,
+    /** Confirms the sign-up with the code, then signs in with the same password. */
+    private val confirmSignUp: suspend (email: String, code: String, password: String) -> Unit = { _, _, _ -> },
+    private val sendNewCode: suspend (email: String) -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(SignInState())
     val state: StateFlow<SignInState> = _state.asStateFlow()
@@ -68,7 +82,48 @@ class SignInViewModel(
                 // Clears the password from memory now that it's no longer needed.
                 _state.update { it.copy(signingIn = false, password = "") }
             } catch (failure: Exception) {
+                if (failure is CognitoException && failure.type == "UserNotConfirmedException") {
+                    _state.update { it.copy(signingIn = false, unconfirmed = true) }
+                } else {
+                    _state.update { it.copy(signingIn = false, error = signInErrorMessage(failure)) }
+                }
+            }
+        }
+    }
+
+    fun onCodeChange(code: String) = _state.update { it.copy(code = code, codeError = null) }
+
+    /** Confirms the account with the entered code, then signs in. */
+    fun confirm() {
+        val current = _state.value
+        if (current.signingIn) return
+        val code = current.code.trim()
+        if (code.isEmpty()) {
+            _state.update { it.copy(codeError = "Enter the code from the email.") }
+            return
+        }
+        _state.update { it.copy(signingIn = true, error = null) }
+        viewModelScope.launch {
+            try {
+                confirmSignUp(current.email.trim(), code, current.password)
+                _state.update { it.copy(signingIn = false, password = "") }
+            } catch (failure: Exception) {
                 _state.update { it.copy(signingIn = false, error = signInErrorMessage(failure)) }
+            }
+        }
+    }
+
+    /** Emails a new sign-up code. */
+    fun resendCode() {
+        val current = _state.value
+        if (current.sendingCode) return
+        _state.update { it.copy(sendingCode = true, error = null) }
+        viewModelScope.launch {
+            try {
+                sendNewCode(current.email.trim())
+                _state.update { it.copy(sendingCode = false, codeSent = true) }
+            } catch (failure: Exception) {
+                _state.update { it.copy(sendingCode = false, error = signInErrorMessage(failure)) }
             }
         }
     }

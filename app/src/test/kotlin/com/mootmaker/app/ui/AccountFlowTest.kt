@@ -83,6 +83,38 @@ class AccountFlowTest {
         assertTrue(backend.requests.containsAll(listOf("cognito ConfirmSignUp", "cognito RespondToAuthChallenge")))
     }
 
+    // 150: an account whose sign-up was never confirmed is asked for its code at sign-in, can have a
+    // new one sent, and is signed in with the password already entered once confirmed.
+    @Test
+    fun signingInToAnUnconfirmedAccountAsksForTheCodeThenSignsIn() {
+        backend.signInError = "UserNotConfirmedException" to "User is not confirmed."
+        launch()
+        button("Sign in").performClick()
+
+        waitForText("This account hasn't been confirmed yet. Enter the verification code we emailed to demo@mootmaker.com, or send a new one.")
+        button("Send a new code").performClick()
+        waitForText("We've sent a new code. It can take a minute to arrive.")
+        assertEquals("demo@mootmaker.com", backend.codeResentFor)
+
+        field("Verification code").performTextReplacement("123456")
+        button("Confirm").performClick()
+
+        compose.waitUntil(5_000) { shown("Rooms today") }
+        assertTrue(backend.requests.contains("cognito ConfirmSignUp"))
+    }
+
+    // 150: the sign-up code step can send the code again.
+    @Test
+    fun theSignUpCodeStepCanSendANewCode() {
+        launch()
+        fillSignUp()
+        waitForText("Verification code")
+
+        button("Send a new code").performClick()
+        waitForText("We've sent a new code. It can take a minute to arrive.")
+        assertEquals("new@example.com", backend.codeResentFor)
+    }
+
     // A.2 and A.3: Cognito's refusal is shown, and the code step is never reached.
     @Test
     fun aRefusedSignUpShowsCognitosMessageAndStaysOnTheDetails() {

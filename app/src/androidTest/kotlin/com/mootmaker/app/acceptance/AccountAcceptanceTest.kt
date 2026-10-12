@@ -52,12 +52,6 @@ class AccountAcceptanceTest {
     private val cognito by lazy { CognitoClient(Acceptance.http, Acceptance.config.userPoolId, Acceptance.config.androidClientId) }
 
     /**
-     * The form's button, scrolled into view with the keyboard closed first. A tap is injected through the window
-     * manager, so with the keyboard up it can land on the keyboard, or, as the form re-lays out when
-     * the keyboard goes, on the Sign in link below the button (a PR acceptance run once found itself
-     * back on sign-in after Reset password).
-     */
-    /**
      * Presses the form's button through its click action rather than an injected tap. Closing the
      * keyboard re-lays the form out, so a tap aimed at where the button was can land on the Sign in
      * link below it, on the keyboard, or on nothing. The flows are what is under test here, not touch targeting.
@@ -175,6 +169,33 @@ class AccountAcceptanceTest {
         assertFalse(upcoming in admin.subjectsOn(LocalDate.now().plusDays(1).toString()))
         compose.signIn(account)
         compose.waitForText("Incorrect username or password.")
+    }
+
+    /**
+     * 150: an account whose sign-up was never confirmed is finished from sign-in, with a new code.
+     * The first code is read and discarded, so the code entered can only be the resent one.
+     */
+    @Test
+    fun anUnconfirmedSignUpIsFinishedFromSignInWithANewCode() {
+        val identity = EmailHelper.freshAccount()
+        runBlocking { cognito.signUp(identity.email, identity.password, identity.name) }
+        EmailHelper.waitForCode(identity.email)
+        val account = Acceptance.Account(identity.email, identity.password)
+
+        scenario = Acceptance.launchApp()
+        compose.signIn(account)
+        compose.waitForText(
+            "This account hasn't been confirmed yet. Enter the verification code we emailed to ${identity.email}, or send a new one.",
+        )
+        press("Send a new code")
+        compose.waitForText("We've sent a new code. It can take a minute to arrive.")
+        val code = EmailHelper.waitForCode(identity.email)
+        toDelete += account
+
+        compose.field("Verification code").performTextReplacement(code)
+        press("Confirm")
+        compose.waitForText("Add meeting")
+        compose.waitForText(identity.name)
     }
 
     /** A.2: a password below the policy is refused by Cognito, and no code step is reached. */

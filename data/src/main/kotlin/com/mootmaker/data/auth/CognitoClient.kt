@@ -148,6 +148,18 @@ class CognitoClient(
         Unit
     }
 
+    /** Emails a new sign-up code to an account that was never confirmed (use case 150). */
+    suspend fun resendConfirmationCode(email: String) = withContext(io) {
+        call(
+            "ResendConfirmationCode",
+            buildJsonObject {
+                put("ClientId", clientId)
+                put("Username", email)
+            },
+        )
+        Unit
+    }
+
     /**
      * Starts a password reset; Cognito emails a code. With prevent_user_existence_errors on the
      * pool, an email with no account succeeds the same way, so this reveals nothing (use case C.17).

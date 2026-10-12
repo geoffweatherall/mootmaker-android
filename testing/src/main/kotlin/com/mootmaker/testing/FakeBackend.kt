@@ -87,6 +87,9 @@ class FakeBackend : Interceptor {
     var signedUp: String? = null
     var lastPassword: String? = null
 
+    /** The last email a new sign-up code was asked for (ResendConfirmationCode). */
+    var codeResentFor: String? = null
+
     /** The last email a reset code was asked for. Any email succeeds, as with prevent_user_existence_errors. */
     var resetRequestedFor: String? = null
 
@@ -210,8 +213,14 @@ class FakeBackend : Interceptor {
                     cognitoError(chain, "CodeMismatchException", "Invalid verification code provided, please try again.")
                 } else {
                     json["Password"]?.let { lastPassword = it.jsonPrimitive.content }
+                    // A confirmed account signs in from now on.
+                    if (action == "ConfirmSignUp" && signInError?.first == "UserNotConfirmedException") signInError = null
                     respond(chain, 200, "{}")
                 }
+            "ResendConfirmationCode" -> {
+                codeResentFor = json["Username"]!!.jsonPrimitive.content
+                respond(chain, 200, """{"CodeDeliveryDetails":{"DeliveryMedium":"EMAIL"}}""")
+            }
             "ForgotPassword" -> {
                 resetRequestedFor = json["Username"]!!.jsonPrimitive.content
                 respond(chain, 200, """{"CodeDeliveryDetails":{"DeliveryMedium":"EMAIL"}}""")
