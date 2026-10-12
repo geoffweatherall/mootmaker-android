@@ -115,7 +115,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # The keystore is written outside the workspace and deleted at the end of the job.
       - name: Prepare the signing key
@@ -256,7 +256,7 @@ jobs:
       - name: Stop the email helper
         if: always()
         run: if [[ -f "$RUNNER_TEMP/email-helper.pid" ]]; then kill "$(cat "$RUNNER_TEMP/email-helper.pid")" || true; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: android-acceptance-reports-${{ inputs.version }}-${{ github.run_attempt }}
@@ -311,7 +311,7 @@ jobs:
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "::notice title=APK built::${name}.apk $(cut -d' ' -f1 "$RUNNER_TEMP/apk/${name}.apk.sha256")"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: ${{ runner.temp }}/apk
