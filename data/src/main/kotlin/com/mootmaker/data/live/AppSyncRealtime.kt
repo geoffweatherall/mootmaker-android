@@ -43,6 +43,8 @@ class AppSyncRealtime(
     private val idToken: suspend () -> String,
     private val realtimeUrl: (httpEndpoint: String, header: String) -> String = ::realtimeUrlFor,
     private val backoff: Backoff = Backoff(),
+    /** Diagnostic lines about the socket's life and what it receives (mootmaker-android#56). */
+    private val log: (String) -> Unit = {},
 ) : LiveUpdates {
     /** Milliseconds. */
     data class Backoff(val baseMs: Long = 1_000, val maxMs: Long = 30_000)
@@ -63,8 +65,9 @@ class AppSyncRealtime(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
                 // Signed out, no network, socket refused: all just "try again shortly".
+                log("socket failed: ${failure.javaClass.simpleName}: ${failure.message}; retrying in ${delayMs}ms")
             }
             delay(delayMs)
             delayMs = (delayMs * 2).coerceAtMost(backoff.maxMs)
@@ -90,7 +93,9 @@ class AppSyncRealtime(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val message = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
-                when (message["type"]?.jsonPrimitive?.content) {
+                val type = message["type"]?.jsonPrimitive?.content
+                if (type != "ka") log(if (type == "data") "received data: ${datesOf(message)}" else "received $type")
+                when (type) {
                     "connection_ack" -> webSocket.send(startMessage(authorization))
                     "start_ack" -> trySend(LiveEvent.Subscribed)
                     "data" -> datesOf(message)?.let { trySend(LiveEvent.DaysChanged(it)) }
@@ -98,6 +103,7 @@ class AppSyncRealtime(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                log("socket closing: $code $reason")
                 webSocket.close(code, reason)
                 close()
             }

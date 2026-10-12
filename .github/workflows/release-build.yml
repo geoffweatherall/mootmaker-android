@@ -241,8 +241,12 @@ jobs:
           disable-animations: true
           # bash with pipefail, so tee doesn't hide a failing Gradle exit code. Same flags as the
           # build above, so Gradle reuses those APKs rather than building different ones.
+          # logcat runs in the background for the whole session, keeping the app's live-update lines,
+          # the test runner's start and finish of each test, and crashes: enough to tell a broadcast
+          # that never arrived from one the app did not act on (mootmaker-android#56).
           script: |
             adb reverse tcp:8787 tcp:8787
+            adb logcat -c; nohup adb logcat -v threadtime -s MootmakerLive:V TestRunner:I AndroidRuntime:E > logcat.txt 2>&1 &
             fail-fast run -- bash -c 'set -o pipefail; ./gradlew :app:connectedReleaseAndroidTest -PmootmakerVersion=${{ inputs.version }} -PmootmakerTestBuildType=release $ACCEPTANCE_ARGS 2>&1 | tee -a build.log'
             adb install -r app/build/outputs/apk/release/app-release.apk
             fail-fast run -- bash -c 'set -o pipefail; maestro test --format junit --output maestro-report.xml --debug-output maestro-debug -e ENVIRONMENT="$ENV_NAME" smoke/sign-up-lifecycle.yaml 2>&1 | tee maestro.log'
@@ -267,6 +271,7 @@ jobs:
             maestro.log
             maestro-report.xml
             maestro-debug
+            logcat.txt
             app/build/outputs/androidTest-results
             app/build/reports/androidTests
             ${{ runner.temp }}/email-helper.log

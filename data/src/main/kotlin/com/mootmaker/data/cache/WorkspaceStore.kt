@@ -73,6 +73,12 @@ class WorkspaceStore(
     private val scope: CoroutineScope,
     private val now: () -> Long = System::currentTimeMillis,
     private val today: () -> LocalDate = LocalDate::now,
+    /**
+     * Diagnostic lines: live events, invalidations, and day fetches and landings. The app sends them
+     * to logcat, which the acceptance run keeps, so a missed live update shows whether the broadcast
+     * arrived and what the store did with it (mootmaker-android#56).
+     */
+    private val log: (String) -> Unit = {},
 ) {
     private sealed interface Key {
         data object Ref : Key
@@ -154,14 +160,18 @@ class WorkspaceStore(
     // ---- Invalidation ---------------------------------------------------------------------------
 
     /** Applies a live event: named dates are stale; after a gap in the connection, everything is. */
-    fun onLiveEvent(event: LiveEvent) = when (event) {
-        is LiveEvent.DaysChanged -> invalidateDays(event.dates.mapNotNull(::parseDate))
-        LiveEvent.Subscribed -> invalidateAll()
+    fun onLiveEvent(event: LiveEvent) {
+        log("live event $event")
+        when (event) {
+            is LiveEvent.DaysChanged -> invalidateDays(event.dates.mapNotNull(::parseDate))
+            LiveEvent.Subscribed -> invalidateAll()
+        }
     }
 
     /** Marks [dates], and any meeting looked up by id on them, stale. Watched ones are refetched. */
     fun invalidateDays(dates: Collection<LocalDate>) = change {
         val set = dates.toSet()
+        log("invalidate days $set; watched ${set.filter { isWatched(Key.Day(it)) }}")
         snap = snap.copy(
             days = snap.days.mapValues { (date, record) -> if (date in set) record.invalidated() else record },
             // A lookup still in flight has no date yet, so it may be on any of them: distrust it too.
@@ -269,6 +279,7 @@ class WorkspaceStore(
             val generations = dueDays.associateWith { snap.days[it]?.generation ?: 0 }
             snap = snap.copy(days = snap.days + dueDays.associateWith { (snap.days[it] ?: Record()).copy(fetching = true) })
             dueDays.chunked(MAX_DATES_PER_REQUEST).forEach { chunk ->
+                log("fetch days $chunk at generations ${chunk.map { generations[it] }}")
                 launches += { fetch({ api.days(chunk) }, issuedEpoch) { result -> landDays(chunk, result, generations) } }
             }
         }
@@ -327,6 +338,12 @@ class WorkspaceStore(
 
     private fun landDays(dates: List<LocalDate>, result: Result<List<CachedDay>>, generations: Map<LocalDate, Long>) {
         val byDate = result.getOrNull()?.associateBy { it.date }
+        log(
+            "landed days $dates: " + result.fold(
+                { "ok, now at generations ${dates.map { snap.days[it]?.generation }}" },
+                { "failed: ${it.javaClass.simpleName}: ${it.message}" },
+            ),
+        )
         snap = snap.copy(
             days = snap.days + dates.associateWith { date ->
                 val record = snap.days[date] ?: Record()
