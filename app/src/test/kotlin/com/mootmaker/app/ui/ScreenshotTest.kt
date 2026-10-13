@@ -148,6 +148,26 @@ class ScreenshotTest {
     }
 
     @Test
+    fun signInUnconfirmed() = capture("sign-in-unconfirmed") {
+        SignInScreen(
+            state = SignInState(email = "pat@example.com", password = "pat-password", unconfirmed = true),
+            config = SignInConfig.Ready(hasDemoUser = false),
+            onEmailChange = {}, onPasswordChange = {}, onSubmit = {}, onRetryConfig = {},
+            onCreateAccount = {}, onForgotPassword = {}, onAbout = {},
+        )
+    }
+
+    @Test
+    fun signInUnconfirmedCodeSentDark() = capture("sign-in-unconfirmed-code-sent-dark", dark = true) {
+        SignInScreen(
+            state = SignInState(email = "pat@example.com", password = "pat-password", unconfirmed = true, code = "123456", codeSent = true),
+            config = SignInConfig.Ready(hasDemoUser = false),
+            onEmailChange = {}, onPasswordChange = {}, onSubmit = {}, onRetryConfig = {},
+            onCreateAccount = {}, onForgotPassword = {}, onAbout = {},
+        )
+    }
+
+    @Test
     fun homeWithMeetings() = capture("home") {
         HomeScreen(HomeState(TODAY, HomeData("Pat Example", TimeFormat.TwentyFourHour, SAMPLE_AGENDA, SAMPLE_NEEDS_RESPONSE, windowEnd = TODAY.plusDays(2)), loading = false), null, NO_ACTIONS)
     }
